@@ -42,25 +42,52 @@ $appName = Config::get('app.name') ?? 'Vulnerability Management Dashboard';
     <div class="site-header-inner">
         <a class="brand" href="/dashboard">
             <img class="brand-logo" src="/assets/img/nexus-logo.png?v=<?= @filemtime(__DIR__ . '/../../public/assets/img/nexus-logo.png') ?: time() ?>" alt="" aria-hidden="true">
-            <?= htmlspecialchars($appName) ?>
+            <span class="brand-name"><?= htmlspecialchars($appName) ?></span>
         </a>
         <?php if (!empty($_SESSION['user_id'])): ?>
         <button type="button" class="nav-toggle" id="navToggle" aria-label="Open menu" aria-expanded="false" aria-controls="siteNav">
             <svg class="icon-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
             <svg class="icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </button>
+        <?php
+        // Main nav: the data views only. Admin tools live in the account menu
+        // (below) so the bar fits on one line at laptop widths instead of
+        // wrapping two-word links onto two lines.
+        //
+        // The current page's link gets aria-current="page", styled as an
+        // underline that sits outside the text (style.css), so marking it
+        // never changes any link's width and the bar doesn't shift between
+        // pages. Pages reached from a list count as part of it.
+        $navLinks = [
+            '/dashboard'       => 'Dashboard',
+            '/trends'          => 'Trends',
+            '/ce_readiness'    => 'CE+ Readiness',
+            '/assets'          => 'Assets',
+            '/vulnerabilities' => 'Vulnerabilities',
+            '/top_fixes'       => 'Top fixes',
+            '/reports'         => 'Reports',
+        ];
+        $navPath = preg_replace('/\.php$/', '', rtrim((string)parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH), '/')) ?: '/dashboard';
+        $navPath = [
+            '/vulnerability_detail' => '/vulnerabilities',
+            '/report_pdf'           => '/reports',
+            '/report_csv'           => '/reports',
+            '/index'                => '/dashboard',
+        ][$navPath] ?? $navPath;
+        $accountLinks = [
+            '/preferences' => 'Preferences',
+            '/password'    => 'Password',
+            '/mfa'         => 'Security',
+        ];
+        $adminLinks = !empty($_SESSION['is_admin'])
+            ? ['/admin/users' => 'Manage Users', '/admin/api_usage' => 'API Usage']
+            : [];
+        $inAccountMenu = isset($accountLinks[$navPath]) || isset($adminLinks[$navPath]);
+        ?>
         <nav class="site-nav" id="siteNav">
-            <a href="/dashboard">Dashboard</a>
-            <a href="/trends">Trends</a>
-            <a href="/ce_readiness">CE+ Readiness</a>
-            <a href="/assets">Assets</a>
-            <a href="/vulnerabilities">Vulnerabilities</a>
-            <a href="/top_fixes">Top fixes</a>
-            <a href="/reports">Reports</a>
-            <?php if (!empty($_SESSION['is_admin'])): ?>
-            <a href="/admin/users">Manage Users</a>
-            <a href="/admin/api_usage">API Usage</a>
-            <?php endif; ?>
+            <?php foreach ($navLinks as $href => $label): ?>
+            <a href="<?= $href ?>"<?= $navPath === $href ? ' aria-current="page"' : '' ?>><?= $label ?></a>
+            <?php endforeach; ?>
             <!-- Account menu. The per-user, non-navigational items (Preferences,
                  Password, Security, Log out) used to sit inline in the nav row,
                  which had grown to ~11 items. Collapsing them behind the user
@@ -83,15 +110,23 @@ $appName = Config::get('app.name') ?? 'Vulnerability Management Dashboard';
                 <span class="nav-search-label">Search</span>
             </a>
             <div class="account-menu">
-                <button type="button" class="user-chip user-chip-button" id="accountMenuToggle" aria-haspopup="true" aria-expanded="false" aria-controls="accountMenu">
-                    <span class="user-chip-name"><?= htmlspecialchars($_SESSION['username']) ?><?= !empty($_SESSION['is_admin']) ? ' · admin' : '' ?></span>
+                <button type="button" class="user-chip user-chip-button<?= $inAccountMenu ? ' is-current' : '' ?>" id="accountMenuToggle" aria-haspopup="true" aria-expanded="false" aria-controls="accountMenu">
+                    <span class="user-chip-name"><?= htmlspecialchars($_SESSION['username']) ?></span>
+                    <?php if (!empty($_SESSION['is_admin'])): ?><span class="user-chip-role">admin</span><?php endif; ?>
                     <svg class="icon-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
                 </button>
                 <div class="account-menu-panel" id="accountMenu" hidden>
-                    <a href="/preferences">Preferences</a>
-                    <a href="/password">Password</a>
-                    <a href="/mfa">Security</a>
-                    <a href="/logout">Log out</a>
+                    <?php if ($adminLinks !== []): ?>
+                    <span class="account-menu-heading">Admin</span>
+                    <?php foreach ($adminLinks as $href => $label): ?>
+                    <a href="<?= $href ?>"<?= $navPath === $href ? ' aria-current="page"' : '' ?>><?= $label ?></a>
+                    <?php endforeach; ?>
+                    <span class="account-menu-heading">Account</span>
+                    <?php endif; ?>
+                    <?php foreach ($accountLinks as $href => $label): ?>
+                    <a href="<?= $href ?>"<?= $navPath === $href ? ' aria-current="page"' : '' ?>><?= $label ?></a>
+                    <?php endforeach; ?>
+                    <a href="/logout" class="account-menu-logout">Log out</a>
                 </div>
             </div>
             <button type="button" class="theme-toggle" id="themeToggle" aria-label="Toggle light and dark mode" title="Toggle light and dark mode">

@@ -148,6 +148,10 @@ h1 {
 /* Header / nav                                                        */
 /* ------------------------------------------------------------------ */
 
+/* Reserve the scrollbar's space on every page, so moving between a short
+   page and a long one doesn't nudge the whole header sideways. */
+html { scrollbar-gutter: stable; }
+
 .site-header {
     background: var(--panel-raised);
     border-bottom: 1px solid var(--hairline);
@@ -238,8 +242,27 @@ h1 {
     font-size: 0.9rem;
 }
 
-.site-nav a { color: var(--text-muted); }
+.site-nav a { color: var(--text-muted); white-space: nowrap; }
 .site-nav a:hover { color: var(--text); }
+
+/* Current page: brighter text plus an underline drawn outside the text box
+   (absolutely positioned, so it takes no space). Deliberately not bold - a
+   bolder current link is wider, which is what made the bar shift about as
+   you moved between pages. */
+.site-nav > a[aria-current="page"] {
+    position: relative;
+    color: var(--text);
+}
+.site-nav > a[aria-current="page"]::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -0.55rem;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--signal);
+}
 
 .user-chip {
     color: var(--text-muted);
@@ -287,6 +310,25 @@ h1 {
 .user-chip-button[aria-expanded="true"] .icon-chevron {
     transform: rotate(180deg);
 }
+.user-chip-name { white-space: nowrap; }
+/* "admin" as a small tag inside the chip rather than "name · admin" text,
+   which wrapped the chip onto two lines at laptop widths. */
+.user-chip-role {
+    padding: 0.05rem 0.4rem;
+    border-radius: 999px;
+    background: var(--signal-dim);
+    color: var(--signal);
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+/* On an account-menu page (Preferences, Manage Users...) the chip is the
+   "current" item, since those links live inside it. */
+.user-chip-button.is-current {
+    color: var(--text);
+    border-color: var(--signal);
+}
 
 .account-menu-panel {
     position: absolute;
@@ -318,6 +360,26 @@ h1 {
     background: var(--panel);
     color: var(--text);
     text-decoration: none;
+}
+.account-menu-panel a[aria-current="page"] { color: var(--signal); }
+.account-menu-heading {
+    padding: 0.5rem 0.75rem 0.2rem;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+.account-menu-heading ~ .account-menu-heading {
+    margin-top: 0.3rem;
+    padding-top: 0.6rem;
+    border-top: 1px solid var(--hairline);
+}
+.account-menu-logout {
+    margin-top: 0.3rem;
+    border-top: 1px solid var(--hairline);
+    border-radius: 0 !important;
+    padding-top: 0.65rem !important;
 }
 
 /* ------------------------------------------------------------------ */
@@ -1389,6 +1451,12 @@ body.chart-fullscreen-open { overflow: hidden; }
         color: var(--text);
     }
     .account-menu-panel a:hover { background: var(--row-hover); }
+    .site-nav > a[aria-current="page"] { color: var(--signal); }
+    .user-chip-role { margin-right: auto; }
+    .site-nav > a[aria-current="page"]::after { display: none; }
+    .account-menu-heading { padding: 0.7rem 1.5rem 0.3rem 2.5rem; }
+    .account-menu-heading ~ .account-menu-heading { margin-top: 0; border-top: none; }
+    .account-menu-logout { margin-top: 0; border-top: none; padding-top: 0.9rem !important; }
 
     .site-nav > *:last-child { border-bottom: none; }
 }
@@ -2579,21 +2647,22 @@ a.movement-card .movement-card-hint {
     gap: 0.4rem;
 }
 .nav-search svg { width: 18px; height: 18px; }
-/* The search icon took the admin nav just past one line at ~1300px,
-   wrapping two-word links ("CE+ Readiness", "Manage Users"). A slightly
-   tighter gap makes room. Not nowrap: on narrower desktops (861-1150px)
-   that pushes the admin nav off the right edge, and wrapping is the
-   better fallback. The mobile dropdown has its own layout. */
+/* Desktop nav spacing. Every item is nowrap (above), so the bar is always
+   one line; at narrower desktop widths it tightens instead of wrapping. */
 @media (min-width: 861px) {
-    .site-nav { gap: 1.2rem; }
+    .site-nav { gap: 1.3rem; }
 }
-/* Between the hamburger breakpoint and ~1200px the admin nav (two more
-   links than a client's) no longer fits on one line now that CE+ Readiness
-   and the search icon have been added. Tighten it there, so it matches what
-   the nav fitted in before. */
-@media (min-width: 861px) and (max-width: 1199px) {
-    .site-nav { gap: 0.85rem; font-size: 0.84rem; }
+@media (min-width: 861px) and (max-width: 1099px) {
+    .site-nav { gap: 0.9rem; font-size: 0.85rem; }
     .site-nav .user-chip { padding: 0.25rem 0.5rem; }
+    .brand { margin-right: 1.25rem; }
+}
+/* Just above the hamburger breakpoint: logo without the name, so the full
+   admin bar still fits on one line. */
+@media (min-width: 861px) and (max-width: 979px) {
+    .brand-name { display: none; }
+    .brand { margin-right: 0.75rem; }
+    .site-nav { gap: 0.75rem; }
 }
 /* Icon-only in the desktop nav; the label shows in the mobile dropdown. */
 .nav-search-label { display: none; }
