@@ -166,15 +166,13 @@ $viewTagId = Helpers::resolveViewTag($availableTagIds);
 
 // Tags this account can see that have an agent activation ID (set by an admin
 // in Manage Users > Tags) - what the "Install agent" overlay offers. Scoped by
-// $availableTags, so a client only ever gets their own tags' IDs. Opens on the
-// tag being viewed, if it has one.
+// $availableTags, so a client only ever gets their own tags' IDs. When one tag
+// is being viewed, only that tag counts: no ID on it, no button.
 $installTags = AgentInstall::installableTags($availableTags);
-$installDefaultTagId = $installTags !== [] ? $installTags[0]['id'] : null;
-foreach ($installTags as $it) {
-    if ($it['id'] === $viewTagId) {
-        $installDefaultTagId = $it['id'];
-    }
+if ($viewTagId !== null) {
+    $installTags = array_values(array_filter($installTags, static fn (array $it): bool => $it['id'] === $viewTagId));
 }
+$installDefaultTagId = $installTags !== [] ? $installTags[0]['id'] : null;
 
 $page    = max(1, (int)($_GET['page'] ?? 1));
 $perPage = 50;

@@ -78,4 +78,10 @@ test('the Install agent overlay only offers the account its own tags', function 
     $page = render_page('assets.php', '', 'admin');
     ok(str_contains($page, ID_A) && str_contains($page, ID_B), 'admin gets every tag');
     ok(str_contains($page, 'id="installAgentTag"'), 'with a tag picker');
+
+    Database::getConnection()->exec('UPDATE tags SET agent_activation_id = NULL WHERE id = 2');
+    $page = render_page('assets.php', 'view_tag=2', 'admin');
+    ok(!str_contains($page, 'id="installAgentOpen"'), 'viewing a tag with no ID: no button');
+    $page = render_page('assets.php', 'view_tag=1', 'admin');
+    ok(str_contains($page, 'id="installAgentOpen"') && !str_contains($page, 'id="installAgentTag"'), 'viewing a tag with an ID: just that tag');
 });
