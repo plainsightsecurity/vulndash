@@ -266,7 +266,7 @@ require __DIR__ . '/../src/views/header.php';
             <ol>
                 <li>Click Start and type <strong>PowerShell</strong>.</li>
                 <li>Right-click <strong>Windows PowerShell</strong> and choose <strong>Run as administrator</strong>.</li>
-                <li>Click <strong>Yes</strong> when Windows asks for permission.</li>
+                <li>When Windows asks for permission, enter the username and password of an administrator account and click <strong>Yes</strong>. You don't need to be signed in to Windows as an administrator.</li>
                 <li>Paste the command (right-click or Ctrl+V) and press Enter.</li>
             </ol>
         </details>
