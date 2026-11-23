@@ -331,6 +331,16 @@ A few things worth knowing about how it behaves:
 - Deleting a user is immediate and permanent (their `user_tags`
   assignments cascade-delete with them); deactivating is reversible and
   is usually what you want for someone leaving temporarily.
+- **Agent activation ID** (Tags table, `tags.agent_activation_id`): set a
+  tag's Cloud Agent activation ID and every account that can see the tag
+  gets an **Install agent** button on the Assets page. It opens an overlay
+  with the Windows (PowerShell) and macOS/Linux install one-liners - the
+  same ones as the CE+ onboarding instructions - with the ID filled in and
+  a Copy button for each. Accounts with several such tags pick one from a
+  dropdown. Blank = no install command for that tag. Only UUIDs are
+  accepted, since the ID ends up in a command run as administrator. The
+  command text lives in `src/Lib/AgentInstall.php`. This is separate from
+  the Qualys identifier column, which is what links the tag to Qualys data.
 
 The CLI script from earlier is still there as an alternative if you'd
 rather script account creation (e.g. bulk-provisioning) than click through

@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../src/bootstrap.php';
 
+use VulnDash\Lib\AgentInstall;
 use VulnDash\Lib\AuditLog;
 use VulnDash\Lib\AgentUninstallRepository;
 use VulnDash\Lib\Auth;
@@ -163,6 +164,18 @@ $availableTagIds = array_map('intval', array_column($availableTags, 'id'));
 // session - see Helpers::resolveViewTag() for exactly how.
 $viewTagId = Helpers::resolveViewTag($availableTagIds);
 
+// Tags this account can see that have an agent activation ID (set by an admin
+// in Manage Users > Tags) - what the "Install agent" overlay offers. Scoped by
+// $availableTags, so a client only ever gets their own tags' IDs. Opens on the
+// tag being viewed, if it has one.
+$installTags = AgentInstall::installableTags($availableTags);
+$installDefaultTagId = $installTags !== [] ? $installTags[0]['id'] : null;
+foreach ($installTags as $it) {
+    if ($it['id'] === $viewTagId) {
+        $installDefaultTagId = $it['id'];
+    }
+}
+
 $page    = max(1, (int)($_GET['page'] ?? 1));
 $perPage = 50;
 
@@ -197,12 +210,87 @@ $pageTitle = 'Assets';
 require __DIR__ . '/../src/views/header.php';
 ?>
 
-<div class="page-heading">
-    <h1>Assets</h1>
-    <p class="page-subtitle">
-        <?= !$isAdmin ? 'Your assigned assets' : 'All assets' ?><?= $viewTagId !== null ? ', filtered to one tag' : '' ?> - click a hostname to see its open vulnerabilities.
-    </p>
+<div class="page-heading page-heading-actions">
+    <div>
+        <h1>Assets</h1>
+        <p class="page-subtitle">
+            <?= !$isAdmin ? 'Your assigned assets' : 'All assets' ?><?= $viewTagId !== null ? ', filtered to one tag' : '' ?> - click a hostname to see its open vulnerabilities.
+        </p>
+    </div>
+    <?php if ($installTags !== []): ?>
+    <button type="button" class="btn btn-primary" id="installAgentOpen" aria-haspopup="dialog">Install agent</button>
+    <?php endif; ?>
 </div>
+
+<?php if ($installTags !== []): ?>
+<!-- "Install agent" overlay: the same one-line install commands as the CE+
+     onboarding instructions, per tag. Every tag's commands are rendered up
+     front and the tag picker just shows one set, so it works without a round
+     trip; a native <dialog> gives focus trapping and Escape-to-close for free. -->
+<dialog class="install-dialog" id="installAgentDialog" aria-labelledby="installAgentTitle">
+    <div class="install-dialog-head">
+        <h2 id="installAgentTitle">Install the Qualys agent</h2>
+        <button type="button" class="install-dialog-close" data-install-close aria-label="Close">&times;</button>
+    </div>
+    <p class="install-intro">
+        Pick the operating system, copy the command and run it in a terminal opened as an
+        administrator. The new agent appears under Assets after it first reports to Qualys and
+        the next dashboard sync runs.
+    </p>
+    <?php if (count($installTags) > 1): ?>
+    <label class="field install-tag-picker">
+        <span>Tag</span>
+        <select id="installAgentTag">
+            <?php foreach ($installTags as $it): ?>
+            <option value="<?= $it['id'] ?>"<?= $it['id'] === $installDefaultTagId ? ' selected' : '' ?>><?= Helpers::e($it['name']) ?></option>
+            <?php endforeach; ?>
+        </select>
+    </label>
+    <?php endif; ?>
+
+    <?php foreach ($installTags as $it): ?>
+    <div class="install-set" data-install-tag="<?= $it['id'] ?>"<?= $it['id'] === $installDefaultTagId ? '' : ' hidden' ?>>
+        <p class="install-activation">
+            <?= count($installTags) === 1 ? Helpers::e($it['name']) . ' - activation' : 'Activation' ?>
+            ID <span class="mono"><?= Helpers::e($it['activation_id']) ?></span>, already built into the commands.
+        </p>
+
+        <h3>Windows</h3>
+        <p>Paste into PowerShell opened as Administrator. Can also be deployed through an RMM tool.</p>
+        <div class="install-command">
+            <code><?= Helpers::e($it['windows']) ?></code>
+            <button type="button" class="btn btn-sm btn-secondary" data-copy>Copy</button>
+        </div>
+        <details class="install-help">
+            <summary>How do I open PowerShell as an Administrator?</summary>
+            <ol>
+                <li>Click Start and type <strong>PowerShell</strong>.</li>
+                <li>Right-click <strong>Windows PowerShell</strong> and choose <strong>Run as administrator</strong>.</li>
+                <li>Click <strong>Yes</strong> when Windows asks for permission.</li>
+                <li>Paste the command (right-click or Ctrl+V) and press Enter.</li>
+            </ol>
+        </details>
+
+        <h3>macOS / Linux</h3>
+        <p>Paste into Terminal from an account with administrator (sudo) rights. It will ask for that account's password - nothing shows as you type it.</p>
+        <div class="install-command">
+            <code><?= Helpers::e($it['unix']) ?></code>
+            <button type="button" class="btn btn-sm btn-secondary" data-copy>Copy</button>
+        </div>
+        <details class="install-help">
+            <summary>How do I open Terminal?</summary>
+            <ol>
+                <li>macOS: press Cmd+Space, type <strong>Terminal</strong> and press Return.</li>
+                <li>Linux: press Ctrl+Alt+T, or open <strong>Terminal</strong> from the applications menu.</li>
+                <li>Paste the command (Cmd+V on macOS, Ctrl+Shift+V on Linux) and press Enter.</li>
+            </ol>
+        </details>
+    </div>
+    <?php endforeach; ?>
+
+    <p class="install-note">Each command may wrap on screen, but Copy always copies it as one line.</p>
+</dialog>
+<?php endif; ?>
 
 <?php if ($flash): ?>
 <div class="flash flash-<?= Helpers::e($flash['type']) ?>"><?= Helpers::e($flash['message']) ?></div>
@@ -350,6 +438,62 @@ function confirmBulkAction(form, submitter) {
         'If an agent is later re-installed, the asset will reappear.'
     );
 }
+
+// "Install agent" overlay: open/close, tag picker, copy buttons.
+(function () {
+    var dialog = document.getElementById('installAgentDialog');
+    var openBtn = document.getElementById('installAgentOpen');
+    if (!dialog || !openBtn || typeof dialog.showModal !== 'function') return;
+
+    openBtn.addEventListener('click', function () { dialog.showModal(); });
+    dialog.querySelectorAll('[data-install-close]').forEach(function (b) {
+        b.addEventListener('click', function () { dialog.close(); });
+    });
+    // A click on the backdrop lands on the <dialog> itself.
+    dialog.addEventListener('click', function (e) {
+        if (e.target === dialog) dialog.close();
+    });
+
+    var picker = document.getElementById('installAgentTag');
+    if (picker) {
+        picker.addEventListener('change', function () {
+            dialog.querySelectorAll('.install-set').forEach(function (set) {
+                set.hidden = set.getAttribute('data-install-tag') !== picker.value;
+            });
+        });
+    }
+
+    // Copies the <code> text, which is always one line - the wrapping is CSS only.
+    function fallbackCopy(text) {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        dialog.appendChild(ta);
+        ta.select();
+        var done = false;
+        try { done = document.execCommand('copy'); } catch (e) { done = false; }
+        dialog.removeChild(ta);
+        return done;
+    }
+    dialog.querySelectorAll('[data-copy]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var text = btn.parentNode.querySelector('code').textContent;
+            function flash(label) {
+                btn.textContent = label;
+                setTimeout(function () { btn.textContent = 'Copy'; }, 2000);
+            }
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).then(function () { flash('Copied'); }, function () {
+                    flash(fallbackCopy(text) ? 'Copied' : 'Copy failed');
+                });
+            } else {
+                flash(fallbackCopy(text) ? 'Copied' : 'Copy failed');
+            }
+        });
+    });
+})();
 </script>
 
 <?php require __DIR__ . '/../src/views/footer.php';

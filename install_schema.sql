@@ -415,6 +415,7 @@ CREATE TABLE `tags` (
   `qualys_tag_id` varchar(191) DEFAULT NULL,
   `name` varchar(255) NOT NULL,
   `ce_assessment_date` date DEFAULT NULL,
+  `agent_activation_id` char(36) DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),

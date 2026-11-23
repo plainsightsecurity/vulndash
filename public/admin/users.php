@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../src/bootstrap.php';
 
+use VulnDash\Lib\AgentInstall;
 use VulnDash\Lib\AuditLog;
 use VulnDash\Lib\Auth;
 use VulnDash\Lib\Config;
@@ -237,6 +238,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                           . "start showing data automatically once an agent carrying a tag named "
                           . "\"{$name}\" first reports in."
                 );
+                break;
+
+            case 'set_activation_id':
+                // Blank clears it, which removes the tag from the Assets
+                // page's "Install agent" overlay.
+                $tagId = (int)($_POST['tag_id'] ?? 0);
+                $raw = trim((string)($_POST['agent_activation_id'] ?? ''));
+                $activationId = AgentInstall::normaliseActivationId($raw);
+                if ($raw !== '' && $activationId === null) {
+                    throw new \RuntimeException('That is not a valid activation ID - it should look like 0888d22d-c088-4e0e-85c3-e4f60f3f3582.');
+                }
+                if (UserRepository::getTagsByIds([$tagId]) === []) {
+                    throw new \RuntimeException('That tag no longer exists.');
+                }
+                $tagName = $tagNamesFor([$tagId])[0];
+                UserRepository::setAgentActivationId($tagId, $activationId);
+                AuditLog::record('admin.tag_activation_id', [
+                    'target_type' => 'tag', 'target_id' => $tagId, 'target_label' => $tagName,
+                    'details' => ['activation_id' => $activationId],
+                ]);
+                Helpers::setFlash($activationId === null
+                    ? "Activation ID cleared for '{$tagName}'."
+                    : "Activation ID for '{$tagName}' saved - accounts with this tag can now get the install command from the Assets page.");
                 break;
 
             case 'delete_tag':
@@ -597,11 +621,16 @@ require __DIR__ . '/../../src/views/header.php';
         apart from case. If you already know the Qualys identifier (the numeric tag ID, a tag name, or an
         Activation UUID), enter it and the tag is live immediately.
     </p>
+    <p class="page-subtitle" style="margin-bottom: 0.75rem;">
+        Set a tag's <strong>agent activation ID</strong> and every account with that tag gets an
+        "Install agent" button on the Assets page, showing the Windows and macOS/Linux install
+        commands with the ID filled in. Leave it blank to offer no install command for the tag.
+    </p>
 
     <?php if (!empty($tags)): ?>
     <div class="table-wrap" style="margin-bottom: 1.25rem;">
         <table class="vuln-table admin-table">
-            <thead><tr><th>Name</th><th>Qualys identifier</th><th>Users</th><th>Assets</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Name</th><th>Qualys identifier</th><th>Agent activation ID</th><th>Users</th><th>Assets</th><th>Actions</th></tr></thead>
             <tbody>
                 <?php foreach ($tags as $tag):
                     $tagUserCount  = (int)($tag['user_count'] ?? 0);
@@ -619,6 +648,17 @@ require __DIR__ . '/../../src/views/header.php';
                         <?php else: ?>
                         <?= Helpers::e($tag['qualys_tag_id']) ?>
                         <?php endif; ?>
+                    </td>
+                    <td>
+                        <form method="post" class="activation-id-form">
+                            <input type="hidden" name="action" value="set_activation_id">
+                            <input type="hidden" name="tag_id" value="<?= (int)$tag['id'] ?>">
+                            <input type="hidden" name="csrf_token" value="<?= Helpers::e($csrfToken) ?>">
+                            <input type="text" name="agent_activation_id" class="mono" value="<?= Helpers::e($tag['agent_activation_id'] ?? '') ?>"
+                                placeholder="none" maxlength="64" spellcheck="false" autocomplete="off"
+                                aria-label="Agent activation ID for <?= Helpers::e($tag['name']) ?>">
+                            <button type="submit" class="btn btn-sm btn-secondary">Save</button>
+                        </form>
                     </td>
                     <td class="mono"><?= $tagUserCount ?></td>
                     <td class="mono"><?= $tagAssetCount ?></td>

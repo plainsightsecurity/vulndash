@@ -287,13 +287,13 @@ class UserRepository
     {
         $pdo = Database::getConnection();
         return $pdo->query("
-            SELECT t.id, t.qualys_tag_id, t.name,
+            SELECT t.id, t.qualys_tag_id, t.name, t.agent_activation_id,
                    COUNT(DISTINCT ut.user_id) AS user_count,
                    COUNT(DISTINCT at.asset_id) AS asset_count
             FROM tags t
             LEFT JOIN user_tags ut ON ut.tag_id = t.id
             LEFT JOIN asset_tags at ON at.tag_id = t.id
-            GROUP BY t.id, t.qualys_tag_id, t.name
+            GROUP BY t.id, t.qualys_tag_id, t.name, t.agent_activation_id
             ORDER BY t.name
         ")->fetchAll();
     }
@@ -318,7 +318,7 @@ class UserRepository
         $pdo = Database::getConnection();
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
         $stmt = $pdo->prepare("
-            SELECT t.id, t.qualys_tag_id, t.name
+            SELECT t.id, t.qualys_tag_id, t.name, t.agent_activation_id
             FROM tags t
             WHERE t.id IN ($placeholders)
             ORDER BY t.name
@@ -518,6 +518,19 @@ class UserRepository
         Database::getConnection()
             ->prepare('UPDATE tags SET ce_assessment_date = :d WHERE id = :id')
             ->execute(['d' => $date, 'id' => $tagId]);
+    }
+
+    /**
+     * Sets (or clears, with null) the Cloud Agent activation ID offered for
+     * a tag in the Assets page's "Install agent" overlay. Persistence only:
+     * public/admin/users.php normalises and validates it first
+     * (AgentInstall::normaliseActivationId()).
+     */
+    public static function setAgentActivationId(int $tagId, ?string $activationId): void
+    {
+        Database::getConnection()
+            ->prepare('UPDATE tags SET agent_activation_id = :a WHERE id = :id')
+            ->execute(['a' => $activationId, 'id' => $tagId]);
     }
 
     /**
