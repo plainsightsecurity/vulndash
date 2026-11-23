@@ -118,6 +118,46 @@ final class Mailer
         return self::send($toEmail, $toName, $subject, $html, $text);
     }
 
+    /**
+     * New-KEV alert (scripts/send_kev_alerts.php): a vulnerability on CISA's
+     * Known Exploited Vulnerabilities list has newly appeared in the
+     * recipient's scope. Same rule as sendActivityDigestEmail(): no asset
+     * names, findings, CVEs or counts - email isn't a confidential channel -
+     * just the fact that something urgent needs a look, and a link to the
+     * KEV-filtered vulnerability list behind the login.
+     */
+    public static function sendKevAlertEmail(string $toEmail, string $toName, string $reviewUrl): bool
+    {
+        $appName = (string)(Config::get('app.name') ?? 'VulnDash');
+        $subject = "Action needed: actively exploited vulnerability found - {$appName}";
+
+        $html = self::wrapHtml(
+            '<p>Hi ' . self::h($toName) . ',</p>'
+            . '<p>A vulnerability that is <strong>known to be actively exploited</strong> (it\'s on the CISA '
+            . 'Known Exploited Vulnerabilities catalogue) has just been found on a system you monitor'
+            . ' in <strong>' . self::h($appName) . '</strong>.</p>'
+            . '<p>These are the vulnerabilities attackers are using right now, so they should be patched '
+            . 'ahead of everything else. Sign in to see which systems are affected and how to fix it:</p>'
+            . self::button($reviewUrl, 'Review exploited vulnerabilities')
+            . '<p style="color:#5B6472;font-size:13px;">Or copy and paste this link into your browser:<br>'
+            . '<span style="word-break:break-all;">' . self::h($reviewUrl) . '</span></p>'
+            . '<p style="color:#5B6472;font-size:13px;">For your security this email contains no details of '
+            . 'the vulnerability or the systems affected. You get one of these each time a new exploited '
+            . 'vulnerability appears; you can turn them off under Preferences once you\'re signed in.</p>'
+        );
+
+        $text = "Hi {$toName},\n\n"
+            . "A vulnerability that is known to be actively exploited (it's on the CISA Known Exploited "
+            . "Vulnerabilities catalogue) has just been found on a system you monitor in {$appName}.\n\n"
+            . "These are the vulnerabilities attackers are using right now, so they should be patched ahead of "
+            . "everything else. Sign in to see which systems are affected and how to fix it:\n\n"
+            . "{$reviewUrl}\n\n"
+            . "For your security this email contains no details of the vulnerability or the systems affected. "
+            . "You can turn these alerts off under Preferences once you're signed in.\n";
+
+        return self::send($toEmail, $toName, $subject, $html, $text);
+    }
+
     private static function button(string $href, string $label): string
     {
         return '<p><a href="' . self::h($href) . '" '
@@ -159,6 +199,14 @@ final class Mailer
      */
     private static function send(string $toEmail, string $toName, string $subject, string $html, string $text): bool
     {
+        // Test suite only (tests/run.sh sets it): write the message to a file
+        // instead of sending it. Nothing on the server sets this variable, and
+        // Apache doesn't pass arbitrary environment variables through to PHP.
+        $testLog = getenv('VULNDASH_MAIL_LOG');
+        if ($testLog !== false && $testLog !== '') {
+            return file_put_contents($testLog, json_encode(['to' => $toEmail, 'subject' => $subject, 'text' => $text]) . "\n", FILE_APPEND) !== false;
+        }
+
         $apiKey = (string)(Config::get('resend.api_key') ?? '');
         if ($apiKey === '' || $apiKey === 'CHANGEME') {
             error_log("Mailer: resend.api_key is not configured in src/config/config.php - email not sent (subject: \"{$subject}\", to: {$toEmail})");

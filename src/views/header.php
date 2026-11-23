@@ -55,6 +55,7 @@ $appName = Config::get('app.name') ?? 'Vulnerability Management Dashboard';
             <a href="/ce_readiness">CE+ Readiness</a>
             <a href="/assets">Assets</a>
             <a href="/vulnerabilities">Vulnerabilities</a>
+            <a href="/top_fixes">Top fixes</a>
             <a href="/reports">Reports</a>
             <?php if (!empty($_SESSION['is_admin'])): ?>
             <a href="/admin/users">Manage Users</a>

@@ -5,6 +5,7 @@ require_once __DIR__ . '/../src/bootstrap.php';
 
 use VulnDash\Lib\Auth;
 use VulnDash\Lib\Helpers;
+use VulnDash\Lib\KevAlertRepository;
 use VulnDash\Lib\UserRepository;
 
 Auth::check();
@@ -44,6 +45,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ? 'Email notifications are now off.'
             : "Email notifications are now {$freq}. The emails contain no vulnerability details - just a prompt to sign in and review.";
         Helpers::setFlash($msg);
+        header('Location: /preferences');
+        exit;
+    }
+
+    if ($action === 'kev_alerts') {
+        $enabled = !empty($_POST['kev_alerts']);
+        KevAlertRepository::setEnabled($userId, $enabled);
+        Helpers::setFlash($enabled
+            ? 'Exploited-vulnerability alerts are on. You\'ll get an email when a vulnerability on the CISA KEV list newly appears in your systems.'
+            : 'Exploited-vulnerability alerts are off.');
         header('Location: /preferences');
         exit;
     }
@@ -88,6 +99,7 @@ if ($currentDefault !== null && !in_array($currentDefault, $availableTagIds, tru
 }
 
 $currentNotify = UserRepository::getNotifyFrequency($userId);
+$kevAlertsOn   = KevAlertRepository::isEnabled($userId);
 
 $csrfToken = Helpers::csrfToken();
 $flash = Helpers::getFlash();
@@ -156,6 +168,27 @@ require __DIR__ . '/../src/views/header.php';
             </select>
         </label>
         <button type="submit" class="btn btn-primary">Save notification setting</button>
+    </form>
+</div>
+
+<div class="panel edit-panel">
+    <h2>Exploited-vulnerability alerts</h2>
+    <p class="panel-note">
+        Get an email straight away when a vulnerability that attackers are known to be
+        exploiting (one on the CISA Known Exploited Vulnerabilities list) newly appears on
+        <?= $isAdmin ? 'any monitored system' : 'one of your systems' ?>. These are the issues to
+        patch first. Like the notifications above, the email contains no vulnerability details -
+        just a link to sign in and review. Separate from the activity emails, and on by default.
+    </p>
+
+    <form method="post">
+        <input type="hidden" name="csrf_token" value="<?= Helpers::e($csrfToken) ?>">
+        <input type="hidden" name="action" value="kev_alerts">
+        <label class="checkbox-field" style="margin-bottom: 1rem;">
+            <input type="checkbox" name="kev_alerts" value="1" <?= $kevAlertsOn ? 'checked' : '' ?>>
+            <span>Email me when an actively exploited vulnerability is found</span>
+        </label>
+        <button type="submit" class="btn btn-primary">Save alert setting</button>
     </form>
 </div>
 

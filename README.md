@@ -455,6 +455,22 @@ detections 20 minutes). If the crontab cadence changes, update the matching
 (or the defaults in `src/Lib/SyncStatusRepository.php`) so the strip stays
 accurate.
 
+**New-KEV alert emails.** `scripts/send_kev_alerts.php` emails an account
+when a vulnerability on the CISA Known Exploited Vulnerabilities list newly
+appears in its scope (a new detection of a KEV-listed QID, or CISA adding an
+existing finding's CVE). One email per run however many are new; the email
+has no vulnerability detail, only a link to `/vulnerabilities?kev=1`. On by
+default per account, switchable under Preferences (`users.kev_alerts`). The
+first run for an account records its existing KEV findings silently, so
+there is no backlog email. Needs
+`database/migrations/2026-11-add-kev-alerts.sql`. Makes no Qualys API calls.
+
+```cron
+55 * * * * php /var/www/dashboard.plainsightsecurity.co.uk/scripts/send_kev_alerts.php >> /var/log/vulndash/kev_alerts.log 2>&1
+```
+
+`--dry-run` shows who would be emailed without sending or recording anything.
+
 **New-QID fast-path.** Each steady-state KB run (after the historical backfill
 completes) makes one extra id-range call - `id_min = (highest local QID) + 1` -
 to pick up brand-new QIDs immediately, without waiting for Qualys to index

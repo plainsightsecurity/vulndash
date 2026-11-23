@@ -209,6 +209,20 @@ CREATE TABLE `kb_cve` (
   CONSTRAINT `fk_kb_cve_qid` FOREIGN KEY (`qid`) REFERENCES `knowledge_base` (`qid`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `kev_alert_seen`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `kev_alert_seen` (
+  `user_id` int unsigned NOT NULL,
+  `asset_id` int unsigned NOT NULL,
+  `qid` int unsigned NOT NULL,
+  `seen_at` datetime NOT NULL,
+  PRIMARY KEY (`user_id`,`asset_id`,`qid`),
+  KEY `idx_kev_alert_seen_asset_qid` (`asset_id`,`qid`),
+  CONSTRAINT `fk_kev_alert_seen_asset` FOREIGN KEY (`asset_id`) REFERENCES `assets` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_kev_alert_seen_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `knowledge_base`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
@@ -450,6 +464,8 @@ CREATE TABLE `users` (
   `mfa_last_used_counter` bigint unsigned DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `kev_alerts` tinyint(1) NOT NULL DEFAULT '1',
+  `kev_alert_baseline_at` datetime DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_users_username` (`username`),
   UNIQUE KEY `uq_users_email` (`email`),

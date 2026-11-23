@@ -1072,7 +1072,29 @@ body.chart-fullscreen-open { overflow: hidden; }
    still works with JavaScript disabled. */
 .vuln-table th.col-num,
 .vuln-table td.col-num { text-align: right; }
-.top-vulns-table tbody tr[data-href] { cursor: pointer; }
+.top-vulns-table tbody tr[data-href],
+.top-fixes-table tbody tr[data-href] { cursor: pointer; }
+
+/* Top fixes page (public/top_fixes.php): share-of-risk bar beside its %. */
+.top-fixes-summary { margin-bottom: 1rem; }
+.top-fixes-table .col-share { white-space: nowrap; min-width: 9.5rem; }
+.share-bar {
+    display: inline-block;
+    width: 5.5rem;
+    height: 0.5rem;
+    margin-right: 0.45rem;
+    vertical-align: middle;
+    border-radius: 999px;
+    background: var(--hairline);
+    overflow: hidden;
+}
+.share-bar-fill {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: var(--signal);
+}
+.share-value { font-size: 0.85rem; }
 
 .badge {
     display: inline-block;

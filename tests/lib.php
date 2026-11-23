@@ -66,11 +66,11 @@ function seed_estate(): void
     $pdo->prepare("INSERT INTO users (id, username, email, password_hash, is_admin) VALUES
         (1,'admin','admin@test',:h1,1),(2,'client','client@test',:h2,0)")->execute(['h1' => $hash, 'h2' => $hash]);
     $pdo->exec('INSERT INTO user_tags (user_id, tag_id) VALUES (2,1)');
-    $pdo->exec("INSERT INTO knowledge_base (qid, title, severity_level, cvss3_base) VALUES
-        (5001,'Critical remote code execution',5,9.8),
-        (5002,'High severity flaw',4,7.5),
-        (5003,'Medium weak cipher',3,5.3),
-        (5004,'Low banner disclosure',2,2.6)");
+    $pdo->exec("INSERT INTO knowledge_base (qid, title, severity_level, cvss3_base, patchable) VALUES
+        (5001,'Critical remote code execution',5,9.8,1),
+        (5002,'High severity flaw',4,7.5,1),
+        (5003,'Medium weak cipher',3,5.3,0),
+        (5004,'Low banner disclosure',2,2.6,1)");
     $pdo->exec("INSERT INTO qid_exploit (qid, is_kev, kev_due_date, max_epss, max_epss_percentile, cve_count) VALUES
         (5001,1,'2026-01-01',0.97,0.99,1),(5002,0,NULL,0.12,0.90,1),(5003,0,NULL,0.0003,0.10,1)");
     $pdo->exec("INSERT INTO host_detections (asset_id, qid, status, detection_type, first_found, last_found, times_found,

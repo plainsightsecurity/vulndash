@@ -640,7 +640,7 @@
 // those keep their native behaviour, which also covers keyboard users, who
 // tab straight to the links rather than the row.
 (function () {
-    var rows = document.querySelectorAll('.top-vulns-table tbody tr[data-href]');
+    var rows = document.querySelectorAll('.top-vulns-table tbody tr[data-href], .top-fixes-table tbody tr[data-href]');
     if (!rows.length) {
         return;
     }

@@ -621,7 +621,7 @@ require __DIR__ . '/../src/views/risk_gauge.php';
 <div class="chart-panel">
     <div class="chart-panel-header">
         <h2>Top 10 most detected vulnerabilities</h2>
-        <span class="chart-panel-hint">Click a row to filter</span>
+        <span class="chart-panel-hint">Click a row to filter &middot; <a href="<?= Helpers::e('/top_fixes' . ($tagQuery !== [] ? '?' . http_build_query($tagQuery) : '')) ?>">Ranked by risk instead: Top fixes &rarr;</a></span>
     </div>
     <?php if (empty($topVulns)): ?>
     <p class="chart-empty">No open findings<?= $viewTagId !== null ? ' for this tag' : '' ?>.</p>
