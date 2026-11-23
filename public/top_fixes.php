@@ -93,7 +93,7 @@ require __DIR__ . '/../src/views/header.php';
         taking it from <strong><?= (int)$risk['score'] ?></strong> to about <strong><?= $scoreAfter ?></strong> out of 100.
     </p>
     <p class="report-summary-line">
-        Risk points: <?= number_format($totalPoints, 1) ?> across <?= number_format((int)$risk['findings']) ?> open finding<?= (int)$risk['findings'] === 1 ? '' : 's' ?>
+        Risk points: <?= number_format($totalPoints) ?> across <?= number_format((int)$risk['findings']) ?> open finding<?= (int)$risk['findings'] === 1 ? '' : 's' ?>
         on <?= number_format((int)$risk['assets']) ?> asset<?= (int)$risk['assets'] === 1 ? '' : 's' ?>.
         <?php if ($showHidden): ?>Includes findings you've hidden (the dashboard's "show hidden" is on).<?php endif; ?>
     </p>
