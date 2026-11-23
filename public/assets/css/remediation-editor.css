@@ -1,0 +1,101 @@
+/*
+  CKEditor 5 theming for the admin custom-remediation editor
+  (vulnerability_detail.php + assets/js/remediation-editor.js).
+
+  Loaded after the vendored ckeditor5.css. CKEditor draws everything from
+  --ck-* custom properties, so pointing those at this app's own palette
+  variables (style.css) makes the editor follow the light/dark toggle
+  automatically - there's no separate dark stylesheet to keep in step.
+  Set on :root rather than scoped to the editor because CKEditor renders
+  its floating UI (link balloon, table toolbar, dropdowns) in a container
+  at the end of <body>, outside the panel.
+*/
+:root {
+    --ck-font-face: var(--font-display);
+    --ck-font-size-base: 14px;
+    --ck-border-radius: var(--radius);
+
+    --ck-color-base-background: var(--ink);
+    --ck-color-base-foreground: var(--panel-raised);
+    --ck-color-base-border: var(--hairline);
+    --ck-color-base-text: var(--text);
+    --ck-color-base-focus: var(--signal);
+    --ck-color-base-active: var(--signal);
+    --ck-color-base-active-focus: var(--signal);
+    --ck-color-base-action: var(--signal);
+    --ck-color-text: var(--text);
+    --ck-color-shadow-drop: rgba(0, 0, 0, 0.25);
+    --ck-color-shadow-inner: rgba(0, 0, 0, 0.15);
+
+    --ck-color-focus-border: var(--signal);
+    --ck-focus-border-color: var(--signal);
+    --ck-color-focus-outer-shadow: var(--signal-dim);
+
+    --ck-color-toolbar-background: var(--panel-raised);
+    --ck-color-toolbar-border: var(--hairline);
+
+    --ck-color-button-default-background: transparent;
+    --ck-color-button-default-hover-background: var(--hairline);
+    --ck-color-button-default-active-background: var(--hairline);
+    --ck-color-button-on-background: var(--signal-dim);
+    --ck-color-button-on-hover-background: var(--hairline);
+    --ck-color-button-on-active-background: var(--hairline);
+    --ck-color-button-on-color: var(--signal);
+    --ck-color-split-button-hover-background: var(--hairline);
+    --ck-color-split-button-hover-border: var(--hairline);
+
+    --ck-color-dropdown-panel-background: var(--panel-raised);
+    --ck-color-dropdown-panel-border: var(--hairline);
+    --ck-color-panel-background: var(--panel-raised);
+    --ck-color-panel-border: var(--hairline);
+    --ck-color-list-background: var(--panel-raised);
+    --ck-color-list-button-hover-background: var(--hairline);
+    --ck-color-list-button-on-background: var(--signal-dim);
+    --ck-color-list-button-on-background-focus: var(--signal-dim);
+    --ck-color-list-button-on-text: var(--signal);
+
+    --ck-color-input-background: var(--ink);
+    --ck-color-input-border: var(--hairline);
+    --ck-color-input-text: var(--text);
+    --ck-color-labeled-field-label-background: var(--panel-raised);
+
+    --ck-color-link-default: var(--signal);
+    --ck-color-link-selected-background: var(--signal-dim);
+    --ck-color-tooltip-background: var(--text);
+    --ck-color-tooltip-text: var(--ink);
+    --ck-color-engine-placeholder-text: var(--text-muted);
+    --ck-color-table-focused-cell-background: var(--signal-dim);
+}
+
+/* The editing area: same surface as the app's other form controls, and the
+   same reading rhythm as .qualys-richtext so the editor previews what
+   clients will actually see. */
+.custom-remediation-form .ck-editor__editable_inline {
+    min-height: 14rem;
+    max-height: 60vh;
+    overflow-y: auto;
+    padding: 0.4rem 0.9rem;
+    color: var(--text);
+    font-size: 0.92rem;
+    line-height: 1.6;
+}
+.custom-remediation-form .ck-content p { margin: 0.6rem 0; }
+.custom-remediation-form .ck-content ul,
+.custom-remediation-form .ck-content ol { padding-left: 1.4rem; }
+.custom-remediation-form .ck-content a { color: var(--signal); }
+.custom-remediation-form .ck-content code {
+    font-family: var(--font-mono);
+    background: var(--panel-raised);
+    padding: 0.1em 0.3em;
+    border-radius: 3px;
+}
+.custom-remediation-form .ck-content blockquote {
+    border-left: 3px solid var(--hairline);
+    color: var(--text-muted);
+}
+.custom-remediation-form .ck-content .table table,
+.custom-remediation-form .ck-content .table td,
+.custom-remediation-form .ck-content .table th {
+    border-color: var(--hairline);
+}
+.custom-remediation-form .ck-content .table th { background: var(--panel-raised); }

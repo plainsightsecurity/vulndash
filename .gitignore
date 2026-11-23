@@ -1,0 +1,15 @@
+# Real credentials - never commit
+src/config/config.php
+src/config/config.local.php
+
+# Editor/OS noise
+.DS_Store
+*.swp
+*~
+
+# Logs, backups, delivery zips
+*.log
+*.zip
+*.tgz
+*.bak
+*.old

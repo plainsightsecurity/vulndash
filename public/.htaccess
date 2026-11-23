@@ -1,0 +1,58 @@
+# Prevent directory listings if mod_autoindex is enabled server-wide
+Options -Indexes
+
+# Deny access to dotfiles (.env, .git, this file itself, etc.)
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+# Redundant with the vhost config, but harmless if AllowOverride is in
+# effect and useful if this app is ever moved behind a different vhost.
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "DENY"
+    Header always set Referrer-Policy "same-origin"
+</IfModule>
+
+# Extensionless URLs. Wrapped in IfModule so a server without mod_rewrite
+# degrades to plain .php URLs rather than a 500.
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # The /assets page (assets.php) shares a name with the /assets/ static
+    # directory. Without this, a request for the bare /assets would be turned
+    # by mod_dir into a trailing-slash redirect onto the directory and a 403.
+    # Turn that auto-redirect off so the rule below can serve the page; real
+    # sub-paths (/assets/css/..., images, js) are unaffected because they
+    # resolve to actual files, not the directory.
+    <IfModule mod_dir.c>
+        DirectorySlash Off
+    </IfModule>
+
+    # Canonicalise: bounce a direct client GET/HEAD for /path/foo.php to
+    # /path/foo (301); query string carried over automatically. GET/HEAD only,
+    # so a POST to a .php endpoint is served directly, not redirected (a 301
+    # would drop the body). THE_REQUEST is the raw request line, so this reacts
+    # only to what the client asked for, never to the internal rewrites below.
+    RewriteCond %{REQUEST_METHOD} ^(GET|HEAD)$
+    RewriteCond %{THE_REQUEST} \s/+([^\s?]+)\.php[\s?] [NC]
+    RewriteRule ^ /%1 [R=301,L]
+
+    # Page-vs-directory collision (the /assets page vs /assets/ dir): serve the
+    # page for the bare directory path, with or without a trailing slash. The
+    # conditions test the slash-stripped capture ($1) rather than
+    # REQUEST_FILENAME, so /assets and /assets/ both match; files beneath the
+    # directory (/assets/css/..., images, js) resolve to real files, fail the
+    # -d test, and fall through untouched.
+    RewriteCond %{DOCUMENT_ROOT}/$1 -d
+    RewriteCond %{DOCUMENT_ROOT}/$1.php -f
+    RewriteRule ^(.+?)/?$ /$1.php [L,QSA]
+
+    # Serve the clean URL from the matching .php file at any depth (so
+    # /admin/users -> admin/users.php), only when the request doesn't already
+    # resolve to a real file or directory. QSA preserves the query string.
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{DOCUMENT_ROOT}/$1.php -f
+    RewriteRule ^(.+?)/?$ /$1.php [L,QSA]
+</IfModule>

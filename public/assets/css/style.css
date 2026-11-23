@@ -1,0 +1,2630 @@
+/*
+  Vulnerability Management Dashboard - design system
+  -----------------------------------------------------------------
+  Palette, layout, and the severity colour scale are all deliberate
+  choices for a security-operations tool used daily by analysts and
+  MSSP clients, not a marketing page - see README.md "Design notes"
+  for the reasoning if you want to change any of this.
+*/
+
+/*
+  Theme model
+  -----------------------------------------------------------------
+  Dark is the original look and stays the default (:root, and
+  html[data-theme="dark"] explicitly for when the attribute is set but
+  a person's browser evaluates selector specificity oddly - belt and
+  braces). html[data-theme="light"] overrides the same custom
+  properties with a light equivalent; nothing else in this file
+  branches on theme directly; every rule below just reads a variable.
+
+  --signal is split into two variables rather than one, because it
+  plays two different roles that pull in opposite directions between
+  themes:
+    - --signal: link/accent text and outlines, drawn directly against
+      the adaptive page/panel background - needs to darken in light
+      mode to stay legible on white the way it read as light-on-dark
+      originally.
+    - --signal-button: the solid background of primary CTA buttons
+      (.btn-primary, the active pagination link), always paired with
+      the SAME fixed dark text colour regardless of theme - so it
+      stays the original bright teal in both themes rather than
+      following --signal's darkening, or that pairing would lose
+      contrast in light mode instead of gaining it.
+  The severity scale doesn't need this split: every --sev-* use is
+  either a small stripe/dot (no text-contrast requirement) or a solid,
+  fully opaque badge chip whose own fixed text colour was already
+  chosen for that exact background - self-contained either way, so
+  one set of values works for both themes without change.
+*/
+:root,
+html[data-theme="dark"] {
+    /* Core surface palette */
+    --ink:            #12161D;
+    --panel:          #1B212B;
+    --panel-raised:   #212836;
+    --hairline:       #2B3340;
+    --text:           #E6E9ED;
+    --text-muted:     #8993A1;
+    --text-muted-rgb: 137, 147, 161;
+
+    /* Signal accent - used for links, primary actions, focus rings.
+       A restrained teal rather than a stock SaaS indigo or the
+       terracotta/acid-green defaults this palette was built to avoid. */
+    --signal:         #3FC6B8;
+    --signal-button:  #3FC6B8;
+    --signal-dim:     rgba(63, 198, 184, 0.14);
+
+    /* Severity scale - a graduated slate -> amber -> ember progression,
+       not a literal traffic-light red/amber/green. */
+    --sev-info:       #5B6B7C;
+    --sev-low:        #4C8B72;
+    --sev-medium:     #C99A3A;
+    --sev-high:       #C1652E;
+    --sev-critical:   #B23A3A;
+
+    /* Status tints - the pale translucent backgrounds behind flash
+       messages, the CE+ banner, and the active/inactive account badge,
+       plus the text colour drawn on top of each. Kept independent of
+       --sev-critical/--sev-low (which are solid badge/stripe colours)
+       so the two roles can each use whatever shade actually works for
+       their own context without pulling against each other. */
+    --success-rgb:    76, 139, 114;
+    --success-text:   #BEEAD9;
+    --danger-rgb:     178, 58, 58;
+    --danger-text:    #F2B9B9;
+
+    /* Subtle overlay for a hovered table row - a faint lightening on
+       dark, a faint darkening on light. */
+    --row-hover:      rgba(255, 255, 255, 0.02);
+
+    --font-display:   'IBM Plex Sans', system-ui, sans-serif;
+    --font-mono:      'IBM Plex Mono', ui-monospace, 'SFMono-Regular', monospace;
+
+    --radius:         6px;
+    --shadow-card:    0 1px 2px rgba(0, 0, 0, 0.4);
+
+    color-scheme: dark;
+}
+
+html[data-theme="light"] {
+    --ink:            #F3F5F7;
+    --panel:          #FFFFFF;
+    --panel-raised:   #EDF0F3;
+    --hairline:       #DCE1E7;
+    --text:           #1B212B;
+    --text-muted:     #5B6472;
+    --text-muted-rgb: 91, 100, 114;
+
+    --signal:         #167A70;
+    --signal-button:  #3FC6B8;
+    --signal-dim:     rgba(22, 122, 112, 0.10);
+
+    --sev-info:       #55606C;
+    --sev-low:        #2F6E57;
+    --sev-medium:     #C99A3A;
+    --sev-high:       #A24D1D;
+    --sev-critical:   #9C2F2F;
+
+    --success-rgb:    34, 110, 79;
+    --success-text:   #1F5C43;
+    --danger-rgb:     168, 43, 43;
+    --danger-text:    #7A2020;
+
+    --row-hover:      rgba(17, 23, 31, 0.035);
+
+    --shadow-card:    0 1px 3px rgba(16, 24, 32, 0.08);
+
+    color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    background: var(--ink);
+    color: var(--text);
+    font-family: var(--font-display);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--signal); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+:focus-visible {
+    outline: 2px solid var(--signal);
+    outline-offset: 2px;
+}
+
+h1 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin: 0 0 0.25rem;
+    letter-spacing: -0.01em;
+}
+
+/* ------------------------------------------------------------------ */
+/* Header / nav                                                        */
+/* ------------------------------------------------------------------ */
+
+.site-header {
+    background: var(--panel-raised);
+    border-bottom: 1px solid var(--hairline);
+}
+
+.site-header-inner {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 1.5rem;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-weight: 600;
+    color: var(--text);
+    font-size: 1rem;
+    /* Guarantees clear space between the app name and the first nav item
+       ("Dashboard"). The header uses justify-content: space-between, so on
+       wider viewports there's slack, but as the nav row grows the two can
+       otherwise butt right up against each other - this margin holds a
+       minimum gap regardless of available width. */
+    margin-right: 2rem;
+}
+.brand:hover { text-decoration: none; }
+
+/* Header brand logo (Nexus emblem + wordmark). Replaces the old CSS
+   green-square .brand-mark in the logged-in header. Height-constrained to
+   sit within the 60px header; width follows the image's aspect ratio.
+   .brand-mark is still used as-is by the auth pages (login/reset/etc.). */
+.brand-logo {
+    height: 36px;
+    width: auto;
+    display: block;
+    flex-shrink: 0;
+}
+
+.brand-mark {
+    width: 20px;
+    height: 20px;
+    border-radius: 5px;
+    background: linear-gradient(135deg, var(--signal-button), #257A70);
+    display: inline-block;
+    position: relative;
+    flex-shrink: 0;
+}
+.brand-mark::after {
+    content: '';
+    position: absolute;
+    inset: 5px;
+    border: 2px solid rgba(18, 22, 29, 0.55);
+    border-radius: 2px;
+}
+
+/* Hamburger button - hidden by default; the "Mobile nav" block further
+   down switches it on and turns .site-nav into the dropdown it controls.
+   Kept right next to .site-nav in source order for that reason, even
+   though its own display:none lives outside any media query. */
+.nav-toggle {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    flex-shrink: 0;
+    border-radius: var(--radius);
+    border: 1px solid var(--hairline);
+    background: var(--panel);
+    color: var(--text);
+    cursor: pointer;
+}
+.nav-toggle:hover { background: var(--hairline); }
+.nav-toggle svg { width: 20px; height: 20px; }
+.nav-toggle .icon-close { display: none; }
+.nav-toggle[aria-expanded="true"] .icon-menu { display: none; }
+.nav-toggle[aria-expanded="true"] .icon-close { display: inline-flex; }
+
+.site-nav {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    font-size: 0.9rem;
+}
+
+.site-nav a { color: var(--text-muted); }
+.site-nav a:hover { color: var(--text); }
+
+.user-chip {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    padding: 0.25rem 0.6rem;
+    background: var(--panel);
+    border: 1px solid var(--hairline);
+    border-radius: 999px;
+}
+
+/* ------------------------------------------------------------------ */
+/* Account menu (user chip -> Preferences/Password/Security/Log out)    */
+/* ------------------------------------------------------------------ */
+
+/* Desktop: the chip is a disclosure button and the panel floats below it,
+   right-aligned so it never spills off the header's right edge. The mobile
+   overrides that flatten this into an inline sub-list live in the "Mobile
+   nav" media block further down. */
+.account-menu {
+    position: relative;
+    display: inline-flex;
+}
+
+/* Same pill as .user-chip, plus button affordances (pointer, hover lift, and
+   the chevron that flips when open). Inherits the chip's colour/border/radius
+   via the shared .user-chip class on the same element. */
+.user-chip-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.user-chip-button:hover {
+    color: var(--text);
+    background: var(--hairline);
+}
+.user-chip-button .icon-chevron {
+    width: 13px;
+    height: 13px;
+    flex-shrink: 0;
+    transition: transform 0.15s ease;
+}
+.user-chip-button[aria-expanded="true"] .icon-chevron {
+    transform: rotate(180deg);
+}
+
+.account-menu-panel {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    min-width: 180px;
+    display: flex;
+    flex-direction: column;
+    padding: 0.35rem;
+    background: var(--panel-raised);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-card);
+    z-index: 40;
+}
+/* The base rule sets display:flex, which would otherwise defeat the [hidden]
+   attribute the JS toggles - restate the hidden case so it still wins. */
+.account-menu-panel[hidden] {
+    display: none;
+}
+.account-menu-panel a {
+    display: block;
+    padding: 0.55rem 0.75rem;
+    border-radius: calc(var(--radius) - 3px);
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+.account-menu-panel a:hover {
+    background: var(--panel);
+    color: var(--text);
+    text-decoration: none;
+}
+
+/* ------------------------------------------------------------------ */
+/* Theme toggle                                                         */
+/* ------------------------------------------------------------------ */
+
+.theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    flex-shrink: 0;
+    border-radius: 999px;
+    border: 1px solid var(--hairline);
+    background: var(--panel);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.theme-toggle:hover { background: var(--hairline); color: var(--text); }
+.theme-toggle svg { width: 17px; height: 17px; }
+
+.theme-toggle .icon-moon { display: none; }
+html[data-theme="light"] .theme-toggle .icon-sun { display: none; }
+html[data-theme="light"] .theme-toggle .icon-moon { display: inline-flex; }
+
+.theme-toggle-login { margin-left: auto; }
+
+.site-main {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 4rem;
+}
+
+.site-footer {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    padding: 2rem 0;
+}
+
+.page-heading { margin-bottom: 1.75rem; }
+.page-subtitle { color: var(--text-muted); margin: 0.35rem 0 0; font-size: 0.9rem; }
+
+/* ------------------------------------------------------------------ */
+/* Stat grid (dashboard)                                               */
+/* ------------------------------------------------------------------ */
+
+.stat-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 1px;
+    background: var(--hairline);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-bottom: 1.5rem;
+}
+
+.stat-card {
+    background: var(--panel);
+    padding: 1.25rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    border-top: 3px solid var(--hairline);
+    animation: rise 0.35s ease both;
+}
+
+.stat-number {
+    font-family: var(--font-mono);
+    font-size: 1.9rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.stat-label {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.stat-card-primary { border-top-color: var(--signal); }
+.stat-card.sev-critical { border-top-color: var(--sev-critical); }
+.stat-card.sev-high     { border-top-color: var(--sev-high); }
+.stat-card.sev-medium   { border-top-color: var(--sev-medium); }
+.stat-card.sev-low      { border-top-color: var(--sev-low); }
+.stat-card.sev-info     { border-top-color: var(--sev-info); }
+
+@keyframes rise {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ------------------------------------------------------------------ */
+/* Dashboard charts (severity bar, category/OS donuts, posture line)   */
+/* ------------------------------------------------------------------ */
+
+.chart-panel {
+    background: var(--panel);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+    padding: 1.1rem 1.25rem 1.4rem;
+    margin-bottom: 1.25rem;
+}
+
+.chart-panel-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+.chart-panel-header h2 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.chart-panel-hint {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.chart-empty {
+    color: var(--text-muted);
+    font-size: 0.88rem;
+    padding: 2.5rem 0;
+    text-align: center;
+    margin: 0;
+}
+
+.chart-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.25rem;
+}
+
+/* Shared axis/gridline styling - bar and line charts both use these.
+   chart-axis-label is for NUMBERS (Y-axis gridline ticks) - monospace is
+   intentional there, consistent with .stat-number's tabular-nums
+   treatment elsewhere on this page. chart-category-label is for WORDS
+   (Critical/High/Medium/Low under the bars) - these were previously
+   sharing chart-axis-label's monospace font too, which read as
+   inconsistent/off next to the same words in .stat-label above (no
+   font-family override there, so it inherits the page's normal
+   --font-display) and next to the bar's own value numbers just above
+   them (.bar-value-label, already --font-display). */
+.chart-gridline { stroke: var(--hairline); stroke-width: 1; }
+.chart-axis-label { fill: var(--text-muted); font-size: 11px; font-family: var(--font-mono); }
+.chart-category-label { fill: var(--text-muted); font-size: 11px; font-family: var(--font-display); }
+
+/* Bar chart (Findings by severity) */
+/* font-family on the SVG root is a safety net: SVG <text> with no resolvable
+   font-family falls back to the UA serif (Times), which is what the bar value
+   numbers were rendering in. Setting it here means every label inherits the
+   app's sans font even if a specific label class is ever missing; the mono
+   axis labels still override it via their own rule. */
+.bar-chart { width: 100%; height: auto; overflow: visible; display: block; font-family: var(--font-display); }
+.bar-chart a { cursor: pointer; text-decoration: none; }
+.bar-chart a:hover { text-decoration: none; }
+.bar-rect { transition: opacity 0.15s ease; }
+.bar-chart a:hover .bar-rect { opacity: 0.78; }
+.bar-value-label { fill: var(--text); font-size: 12px; font-weight: 600; font-family: var(--font-display); font-variant-numeric: tabular-nums; }
+.bar-rect.sev-critical { fill: var(--sev-critical); }
+.bar-rect.sev-high     { fill: var(--sev-high); }
+.bar-rect.sev-medium    { fill: var(--sev-medium); }
+.bar-rect.sev-low       { fill: var(--sev-low); }
+
+/* Donut chart (Findings by category / operating system) */
+.donut-wrap {
+    display: flex;
+    align-items: center;
+    gap: 1.75rem;
+    flex-wrap: wrap;
+}
+
+.donut-chart { width: 190px; height: 190px; flex-shrink: 0; }
+.donut-chart a { cursor: pointer; }
+.donut-slice { fill: none; stroke-width: 30; transition: opacity 0.15s ease; }
+.donut-chart a:hover .donut-slice { opacity: 0.78; }
+
+.donut-legend {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    flex: 1;
+    min-width: 170px;
+}
+
+.donut-legend a {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    color: var(--text);
+    font-size: 0.85rem;
+}
+.donut-legend a:hover { color: var(--signal); text-decoration: none; }
+
+.legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+/* Line chart (Vulnerability posture) - hover-only, never clickable */
+/* .line-chart-wrap is the tooltip's positioning context and is intentionally
+   overflow-visible so the tooltip can sit just outside the plot without being
+   clipped or generating a scrollbar. The horizontal-scroll behaviour lives on
+   the inner .line-chart-scroll (chart-scroll-x) instead. */
+.line-chart-wrap { position: relative; }
+.line-chart-scroll { max-width: 100%; }
+.line-chart { width: 100%; height: auto; overflow: visible; display: block; font-family: var(--font-display); }
+.line-stroke { stroke: var(--signal); stroke-width: 2.5; fill: none; }
+.line-hover-dot { fill: var(--signal); stroke: var(--panel); stroke-width: 2; pointer-events: none; }
+
+.line-chart-tooltip {
+    position: absolute;
+    pointer-events: none;
+    background: var(--panel-raised);
+    border: 1px solid var(--hairline);
+    border-radius: 4px;
+    padding: 0.35rem 0.6rem;
+    font-size: 0.78rem;
+    color: var(--text);
+    box-shadow: var(--shadow-card);
+    transform: translate(-50%, -125%);
+    white-space: nowrap;
+    z-index: 5;
+}
+/* Default: bubble sits above the point (its bottom just clears the dot). When
+   the nearest point is high enough that there's no room above, JS adds .below
+   to flip it under the point so the tallest values' tooltips stay on-screen. */
+.line-chart-tooltip.below { transform: translate(-50%, 30%); }
+.line-chart-tooltip strong { color: var(--signal); font-family: var(--font-mono); }
+
+/* Chart panel tools - the hint text plus the full-screen control ------ */
+/* .chart-panel-header is justify-content: space-between, so grouping the
+   hint and the button together in one flex child is what keeps the button
+   immediately to the RIGHT of the hint (title left, hint+button right)
+   rather than the three of them being spread across the full width with
+   the hint stranded in the middle. The group's baseline comes from its
+   first item (the hint), so the header's align-items: baseline still lines
+   the hint up with the <h2> exactly as it did before. */
+.chart-panel-tools {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+}
+
+.chart-expand,
+.chart-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    background: none;
+    border: 1px solid var(--hairline);
+    border-radius: calc(var(--radius) - 2px);
+    color: var(--text-muted);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.chart-expand:hover,
+.chart-close:hover {
+    color: var(--signal);
+    border-color: var(--signal);
+    background: var(--signal-dim);
+}
+
+/* Both rules above set display: inline-flex, which would otherwise defeat
+   the [hidden] attribute the full-screen script toggles - restate the
+   hidden case so it still wins. Same pattern as .account-menu-panel. */
+.chart-expand[hidden],
+.chart-close[hidden] { display: none; }
+
+.chart-expand svg,
+.chart-close svg { width: 15px; height: 15px; }
+
+/* Full-screen chart view ---------------------------------------------- */
+/* Deliberately a fixed, viewport-filling layer rather than the native
+   Fullscreen API: Element.requestFullscreen() still isn't supported for
+   non-video elements on iOS Safari, and this has to behave identically on
+   the phone layout. Nothing moves in the DOM either - the panel itself is
+   promoted in place - so every link, hover handler and tooltip inside it
+   keeps working untouched. That's what keeps the charts clickable while
+   expanded: each bar and donut slice is a real <a>, so clicking one
+   navigates to the filtered vulnerability list and this layer goes away
+   with the page it was drawn on, no extra handling needed.
+   `fixed` is genuinely viewport-relative here - neither .site-main nor any
+   other ancestor sets transform/filter/perspective, which would otherwise
+   turn one of them into the containing block instead. */
+.chart-panel.chart-fullscreen {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 60;
+    margin: 0;
+    border: none;
+    border-radius: 0;
+    padding: 1rem 1.5rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.chart-fullscreen .chart-panel-header {
+    flex-shrink: 0;
+    margin-bottom: 1rem;
+}
+
+.chart-fullscreen .chart-panel-header h2 { font-size: 1.15rem; }
+
+/* Bigger than the in-page control: at this size it's the only affordance
+   on an otherwise edge-to-edge chart, and it's the one thing a person
+   needs to be able to hit immediately to get back. */
+.chart-fullscreen .chart-close { width: 34px; height: 34px; }
+.chart-fullscreen .chart-close svg { width: 18px; height: 18px; }
+
+/* The chart itself takes the rest of the viewport and centres vertically
+   in it. Note there's deliberately no justify-content: center on the
+   scroll wrapper - centring content that overflows an overflow-x: auto
+   box makes the overflowing left-hand side unreachable in several
+   browsers, and .bar-chart/.line-chart keep a min-width on narrow
+   screens precisely so they can overflow and scroll. They're width: 100%
+   anyway, so they fill the row without needing to be centred. */
+.chart-fullscreen > .chart-scroll-x,
+.chart-fullscreen > .line-chart-wrap,
+.chart-fullscreen > .donut-wrap {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.chart-fullscreen > .chart-scroll-x,
+.chart-fullscreen > .line-chart-wrap {
+    display: flex;
+    align-items: center;
+}
+
+.chart-fullscreen > .line-chart-wrap > .line-chart-scroll { width: 100%; }
+
+/* Both SVG charts stay strictly width: 100%; height: auto here. Capping
+   their height instead would let preserveAspectRatio letterbox them, and
+   the line chart's tooltip maps pointer position to a day by simple
+   proportion of the element's box (see footer.php) - which is only exact
+   while the rendered content fills that box edge to edge. At 4.09:1 and
+   3.18:1 they don't come close to exceeding viewport height on a real
+   display in any case; if one ever did, this panel scrolls. */
+
+.chart-fullscreen > .donut-wrap {
+    align-content: center;
+    justify-content: center;
+    gap: 2.5rem;
+}
+
+/* width and height are both capped, so the ring stays square at
+   min(46vh, 420px) without needing the min() function (used nowhere else
+   in this file). */
+.chart-fullscreen .donut-chart {
+    width: 46vh;
+    height: 46vh;
+    max-width: 420px;
+    max-height: 420px;
+}
+
+.chart-fullscreen .donut-legend { gap: 0.7rem; }
+.chart-fullscreen .donut-legend a { font-size: 0.95rem; }
+.chart-fullscreen .legend-dot { width: 12px; height: 12px; }
+
+/* Stops the page underneath scrolling behind the expanded chart - added
+   to <body> by the full-screen script and removed again on close. */
+body.chart-fullscreen-open { overflow: hidden; }
+
+@media (max-width: 900px) {
+    .chart-row { grid-template-columns: 1fr; }
+}
+
+/* ------------------------------------------------------------------ */
+/* CE+ banner                                                           */
+/* ------------------------------------------------------------------ */
+
+.ce-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+    border-radius: var(--radius);
+    border: 1px solid var(--hairline);
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.ce-banner-fail {
+    background: rgba(var(--danger-rgb), 0.1);
+    border-color: rgba(var(--danger-rgb), 0.35);
+}
+
+.ce-banner-pass {
+    background: rgba(var(--success-rgb), 0.1);
+    border-color: rgba(var(--success-rgb), 0.35);
+}
+
+.ce-banner-text strong {
+    font-family: var(--font-mono);
+    font-size: 1.1rem;
+}
+
+.ce-banner-sub {
+    display: block;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    margin-top: 0.15rem;
+}
+
+.dashboard-all-link { margin-top: 0.5rem; }
+
+/* ------------------------------------------------------------------ */
+/* Buttons                                                              */
+/* ------------------------------------------------------------------ */
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.55rem 1rem;
+    border-radius: var(--radius);
+    border: 1px solid var(--hairline);
+    background: var(--panel-raised);
+    color: var(--text);
+    font-size: 0.88rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.btn:hover { background: var(--hairline); text-decoration: none; }
+
+.btn-primary {
+    background: var(--signal-button);
+    border-color: var(--signal-button);
+    color: #0B1613;
+    font-weight: 600;
+}
+.btn-primary:hover { background: #4FDBCC; }
+
+.btn-secondary { background: var(--panel); }
+
+.btn-danger {
+    background: var(--sev-critical);
+    border-color: var(--sev-critical);
+    color: #FCECEC;
+    font-weight: 600;
+}
+.btn-danger:hover { background: #C74444; }
+
+.btn-block { width: 100%; justify-content: center; }
+
+/* ------------------------------------------------------------------ */
+/* Forms (login + filter bar)                                          */
+/* ------------------------------------------------------------------ */
+
+.login-body {
+    background: var(--ink);
+    color: var(--text);
+    font-family: var(--font-display);
+    margin: 0;
+    min-height: 100vh;
+}
+
+.login-wrap {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+}
+
+/* Login page only: stacks the Nexus emblem above the sign-in card. Constrained
+   to the same 360px max-width as .login-card so the logo and card share a
+   column and stay centred together. Other auth pages don't use this wrapper. */
+.login-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+    width: 100%;
+    max-width: 360px;
+}
+
+.login-logo {
+    width: 88px;
+    height: auto;
+    display: block;
+}
+
+.login-card {
+    width: 100%;
+    max-width: 360px;
+    background: var(--panel);
+    border: 1px solid var(--hairline);
+    border-radius: 10px;
+    padding: 2rem;
+    box-shadow: var(--shadow-card);
+    display: flex;
+    flex-direction: column;
+    gap: 1.1rem;
+}
+
+.login-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+.field { display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.85rem; color: var(--text-muted); }
+
+.field input, .field select, .field textarea {
+    font-family: var(--font-display);
+    font-size: 0.95rem;
+    padding: 0.55rem 0.7rem;
+    background: var(--ink);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+    color: var(--text);
+}
+
+/* Custom-remediation editor (vulnerability_detail.php) is the only textarea
+   in the app so far - vertical resize only so it can't be dragged wider than
+   its panel and break the layout. */
+.field textarea {
+    resize: vertical;
+    min-height: 8rem;
+    line-height: 1.5;
+}
+
+.field input:focus, .field select:focus, .field textarea:focus {
+    border-color: var(--signal);
+}
+
+.search-input-wrap {
+    position: relative;
+    display: flex;
+}
+
+.search-input-wrap .search-debounce-input {
+    width: 100%;
+    padding-right: 2rem;
+}
+
+.search-clear {
+    position: absolute;
+    top: 50%;
+    right: 0.35rem;
+    transform: translateY(-50%);
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    background: none;
+    border: none;
+    border-radius: 50%;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+.search-clear:hover { color: var(--text); background: var(--hairline); }
+.search-clear svg { width: 13px; height: 13px; }
+
+.form-error {
+    background: rgba(var(--danger-rgb), 0.12);
+    border: 1px solid rgba(var(--danger-rgb), 0.4);
+    color: var(--danger-text);
+    padding: 0.6rem 0.8rem;
+    border-radius: var(--radius);
+    font-size: 0.85rem;
+    margin: 0;
+}
+
+.filter-bar {
+    display: flex;
+    align-items: flex-end;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.25rem;
+    padding: 1rem 1.25rem;
+    background: var(--panel);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+}
+
+.field-inline { min-width: 180px; }
+
+.checkbox-field {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+    padding-bottom: 0.4rem;
+    cursor: pointer;
+}
+
+.checkbox-field input { accent-color: var(--signal); width: 16px; height: 16px; }
+
+.checkbox-hint { color: var(--text-muted); font-family: var(--font-mono); font-size: 0.78rem; }
+
+.result-count {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin: 0 0 0.6rem;
+}
+
+/* ------------------------------------------------------------------ */
+/* Reports page                                                         */
+/* ------------------------------------------------------------------ */
+
+/* A second, smaller stat-grid living inside the filter-bar itself
+   (reports.php) - same visual language as the dashboard's .stat-grid, but
+   full-width within the form and with a bit of breathing room above/below
+   rather than sitting flush against the filter fields. */
+.report-stat-grid {
+    grid-template-columns: repeat(4, 1fr);
+    width: 100%;
+    margin: 0.25rem 0 0;
+}
+
+.report-summary-panel {
+    width: 100%;
+    padding: 0.9rem 1.1rem;
+    background: var(--panel-raised);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+}
+
+.report-summary-line {
+    margin: 0.15rem 0;
+    font-size: 0.88rem;
+    color: var(--text-muted);
+}
+
+.report-summary-line strong { color: var(--text); }
+
+.report-summary-count {
+    color: var(--text);
+    font-weight: 600;
+}
+
+.report-actions {
+    display: flex;
+    gap: 0.75rem;
+    width: 100%;
+}
+
+.report-actions .btn svg { flex-shrink: 0; }
+
+.report-note {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    max-width: 60ch;
+}
+
+/* ------------------------------------------------------------------ */
+/* Vulnerability table                                                  */
+/* ------------------------------------------------------------------ */
+
+.table-wrap {
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+
+.vuln-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--panel);
+}
+
+.vuln-table th {
+    text-align: left;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    background: var(--panel-raised);
+    padding: 0.7rem 0.9rem;
+    border-bottom: 1px solid var(--hairline);
+}
+
+.sort-link {
+    color: inherit;
+    text-decoration: none;
+    white-space: nowrap;
+}
+.sort-link:hover { color: var(--text); text-decoration: underline; }
+
+.sort-indicator {
+    display: inline-block;
+    margin-left: 0.15rem;
+    font-size: 0.65rem;
+    color: var(--signal);
+}
+
+.vuln-table td {
+    padding: 0.65rem 0.9rem;
+    border-bottom: 1px solid var(--hairline);
+    font-size: 0.88rem;
+    vertical-align: middle;
+}
+
+.vuln-table tbody tr:last-child td { border-bottom: none; }
+.vuln-table tbody tr:hover { background: var(--row-hover); }
+
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* Signature element: a coloured left-edge stripe per row keyed to
+   severity, so a client scanning a long results table can triage by eye
+   before reading a single word - the same instinct a SOC analyst uses. */
+.vuln-table tbody tr { border-left: 4px solid transparent; }
+.vuln-table tbody tr.sev-critical-row { border-left-color: var(--sev-critical); }
+.vuln-table tbody tr.sev-high-row     { border-left-color: var(--sev-high); }
+.vuln-table tbody tr.sev-medium-row   { border-left-color: var(--sev-medium); }
+.vuln-table tbody tr.sev-low-row      { border-left-color: var(--sev-low); }
+.vuln-table tbody tr.sev-info-row     { border-left-color: var(--sev-info); }
+
+.empty-row td { color: var(--text-muted); text-align: center; padding: 2rem; }
+
+/* Dashboard "Top 10 most detected vulnerabilities" table. The Score and
+   Assets columns are numeric, so right-aligning them lines the tabular
+   figures up on their units instead of leaving a ragged right edge. The
+   whole row is a click-through to the filtered vulnerability list (see the
+   data-href row handler in src/views/footer.php); the pointer cursor signals
+   that, while the QID and title stay real <a> links so the click-through
+   still works with JavaScript disabled. */
+.vuln-table th.col-num,
+.vuln-table td.col-num { text-align: right; }
+.top-vulns-table tbody tr[data-href] { cursor: pointer; }
+
+.badge {
+    display: inline-block;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #0B0E12;
+}
+.badge.sev-critical { background: var(--sev-critical); color: #FCECEC; }
+.badge.sev-high     { background: var(--sev-high); color: #FCEEE6; }
+.badge.sev-medium   { background: var(--sev-medium); color: #2B2107; }
+.badge.sev-low      { background: var(--sev-low); color: #E9F5EF; }
+.badge.sev-info     { background: var(--sev-info); color: #EEF1F4; }
+
+/* Same width for every severity lozenge - sized to fit "Critical" (the
+   widest label), text centred - rather than each one hugging its own
+   label's natural width, so the severity column reads as a tidy aligned
+   column instead of a ragged edge. */
+.badge.sev-critical, .badge.sev-high, .badge.sev-medium, .badge.sev-low, .badge.sev-info {
+    min-width: 4.75rem;
+    text-align: center;
+}
+
+/* ------------------------------------------------------------------ */
+/* Pagination                                                           */
+/* ------------------------------------------------------------------ */
+
+.pagination {
+    display: flex;
+    gap: 0.4rem;
+    margin-top: 1.25rem;
+    flex-wrap: wrap;
+}
+
+.pagination a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 32px;
+    height: 32px;
+    border-radius: var(--radius);
+    border: 1px solid var(--hairline);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+}
+
+.pagination a:hover { text-decoration: none; border-color: var(--signal); }
+.pagination a.active { background: var(--signal-button); border-color: var(--signal-button); color: #0B1613; font-weight: 600; }
+
+/* ------------------------------------------------------------------ */
+/* Responsive                                                           */
+/* ------------------------------------------------------------------ */
+
+/* Tables always get a horizontal-scroll container, at any viewport width -
+   harmless when the table already fits (no scrollbar appears), and closes
+   what used to be a gap between the old 560px breakpoint below and
+   .vuln-table's 720px min-width, where an 8-column table on a ~700px-wide
+   tablet had nowhere to go but overflow the page itself. */
+.table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Reusable horizontal-scroll wrapper for the dashboard's SVG charts (see
+   the .chart-scroll-x divs in public/dashboard.php). These SVGs scale
+   their whole coordinate system - text included - to fit the viewBox into
+   whatever width CSS gives them, so on a narrow phone the axis/value
+   labels would shrink to an unreadable size well before the bars/lines
+   themselves became a problem. Letting the chart scroll horizontally near
+   its natural size (min-widths below) keeps every label legible - the
+   same trade-off already made for the vulnerability table above. */
+.chart-scroll-x {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 900px) {
+    .stat-grid { grid-template-columns: repeat(3, 1fr); }
+    .vuln-table { min-width: 720px; }
+
+    /* These min-widths only take effect once a chart's fluid 100% width
+       would otherwise compute below them - on anything from a tablet up
+       to a wide phone in landscape there's still enough room and this
+       never engages, so it only ever costs a scrollbar on genuinely
+       narrow screens. */
+    .bar-chart { min-width: 560px; }
+    .line-chart { min-width: 680px; }
+
+    /* The header now carries a third item (the full-screen control) next
+       to the hint. There's no room for title + hint + button on one line
+       at phone widths, so let the hint/button group drop below the title
+       rather than squeezing or overflowing it. */
+    .chart-panel-header { flex-wrap: wrap; }
+
+    /* 46vh would be wider than a phone screen in portrait - fall back to a
+       flat size that fits the narrowest layout we support. */
+    .chart-fullscreen .donut-chart {
+        width: 240px;
+        height: 240px;
+    }
+
+    .chart-panel.chart-fullscreen { padding: 0.85rem 1rem 1.25rem; }
+    .chart-fullscreen > .donut-wrap { gap: 1.25rem; }
+
+    /* Easier to hit with a fingertip, consistent with the .btn bump
+       below - and on a phone the close control is the only way out of the
+       expanded view short of the Escape key, which there isn't one of. */
+    .chart-expand,
+    .chart-close { width: 36px; height: 36px; }
+    .chart-fullscreen .chart-close { width: 40px; height: 40px; }
+
+    /* Bigger, easier-to-hit tap targets - sizing tuned for a mouse
+       pointer is noticeably fiddly with a fingertip, especially the
+       btn-sm actions packed into admin tables. */
+    .btn { padding: 0.7rem 1.1rem; }
+    .btn-sm { padding: 0.55rem 0.8rem; }
+    .actions-cell { gap: 0.6rem; }
+    .pagination a { min-width: 40px; height: 40px; }
+
+    /* iOS Safari zooms the whole page in when focusing a text input
+       styled below 16px - every text field on this site was under that
+       threshold (0.95rem/0.85rem against this app's 15px base), so every
+       focus used to trigger an unwanted zoom on iPhone. */
+    input[type="text"],
+    input[type="password"],
+    input[type="email"],
+    input[type="search"],
+    input[type="number"],
+    select,
+    textarea {
+        font-size: 16px;
+    }
+}
+
+@media (max-width: 640px) {
+    /* Filter bar: desktop lays these fields out inline, wrapping at
+       whatever point the container forces - on a phone that produces an
+       awkward mix of full-width and half-width rows depending on label
+       length. Stacking everything to full width makes each control an
+       unambiguous, easy tap target instead. */
+    .filter-bar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.85rem;
+    }
+    .field-inline { min-width: 0; width: 100%; }
+    .filter-bar .checkbox-field { padding-bottom: 0; }
+    .filter-bar .search-input-wrap { width: 100%; }
+}
+
+@media (max-width: 560px) {
+    .stat-grid { grid-template-columns: repeat(2, 1fr); }
+    .report-stat-grid { grid-template-columns: repeat(2, 1fr); }
+    .report-actions { flex-direction: column; }
+    .report-actions .btn { width: 100%; justify-content: center; }
+}
+
+@media (max-width: 480px) {
+    .site-main { padding: 1.5rem 1rem 3rem; }
+    .panel { padding: 1rem; }
+    .filter-bar { padding: 0.85rem; }
+    .tag-combo-panel { min-width: 0; }
+
+    /* Long labels (dt) and values (dd) side by side get cramped at this
+       width - stack them instead, same idea as a mobile contact-card
+       layout, so a value like a CVSS vector string gets the full row
+       width to wrap into rather than a squeezed second column. */
+    .kv-list { grid-template-columns: 1fr; gap: 0.2rem 0; }
+    .kv-list dt { margin-top: 0.6rem; }
+    .kv-list dt:first-child { margin-top: 0; }
+}
+
+/* ------------------------------------------------------------------ */
+/* Mobile nav                                                           */
+/* ------------------------------------------------------------------ */
+
+@media (max-width: 860px) {
+    .site-header-inner { position: relative; }
+
+    .nav-toggle { display: inline-flex; }
+
+    /* Prevents a long custom app.name (Config::get('app.name')) from
+       pushing the hamburger button off the edge of the header - truncate
+       with an ellipsis instead. */
+    .brand {
+        min-width: 0;
+        flex-shrink: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    /* The nav becomes a dropdown panel anchored under the header, spanning
+       the same left/right edges as .site-header-inner (which is already
+       effectively full viewport width below its own 1180px max-width). */
+    .site-nav {
+        display: none;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0;
+        background: var(--panel-raised);
+        border: 1px solid var(--hairline);
+        border-top: none;
+        border-radius: 0 0 var(--radius) var(--radius);
+        box-shadow: var(--shadow-card);
+        padding: 0.4rem 0;
+        z-index: 30;
+    }
+    .site-nav[data-open="true"] { display: flex; }
+
+    .site-nav a,
+    .site-nav .user-chip,
+    .site-nav .theme-toggle {
+        width: 100%;
+    }
+
+    .site-nav a {
+        display: block;
+        padding: 0.9rem 1.5rem;
+        border-bottom: 1px solid var(--hairline);
+        color: var(--text);
+    }
+
+    .site-nav .user-chip {
+        display: block;
+        background: none;
+        border: none;
+        border-bottom: 1px solid var(--hairline);
+        border-radius: 0;
+        padding: 0.9rem 1.5rem;
+        text-align: left;
+    }
+
+    /* The icon-only theme toggle reads as a stray circle in a vertical
+       list of text rows - lay it out like the other rows and label it
+       with generated content instead of adding a whole second markup
+       path just for the mobile menu. */
+    .site-nav .theme-toggle {
+        display: flex;
+        justify-content: flex-start;
+        gap: 0.6rem;
+        border: none;
+        border-radius: 0;
+        background: none;
+        padding: 0.9rem 1.5rem;
+    }
+    .site-nav .theme-toggle::after {
+        content: 'Toggle theme';
+        font-size: 0.9rem;
+    }
+
+    /* Flatten the account menu into the vertical list. The wrapper stops
+       being a positioning context, the chip becomes a full-width row like
+       the links, and its panel drops inline (still a disclosure - tapping the
+       chip expands it) as indented sub-rows rather than a floating card. */
+    .account-menu {
+        display: block;
+        width: 100%;
+        position: static;
+    }
+    .user-chip-button {
+        width: 100%;
+        justify-content: space-between;
+        gap: 0.6rem;
+        padding: 0.9rem 1.5rem;
+        background: none;
+        border: none;
+        border-bottom: 1px solid var(--hairline);
+        border-radius: 0;
+        text-align: left;
+    }
+    .user-chip-button:hover { background: none; }
+    .account-menu-panel {
+        position: static;
+        min-width: 0;
+        padding: 0;
+        background: none;
+        border: none;
+        border-radius: 0;
+        box-shadow: none;
+    }
+    .account-menu-panel a {
+        padding: 0.9rem 1.5rem 0.9rem 2.5rem;
+        border-radius: 0;
+        border-bottom: 1px solid var(--hairline);
+        color: var(--text);
+    }
+    .account-menu-panel a:hover { background: var(--row-hover); }
+
+    .site-nav > *:last-child { border-bottom: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .stat-card { animation: none; }
+    * { transition: none !important; }
+}
+
+/* ------------------------------------------------------------------ */
+/* Admin pages (user & tag management)                                  */
+/* ------------------------------------------------------------------ */
+
+.panel {
+    background: var(--panel);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    margin-bottom: 1.5rem;
+}
+
+.panel h2 {
+    font-size: 1.05rem;
+    margin: 0 0 1rem;
+    font-weight: 600;
+}
+
+.flash {
+    padding: 0.7rem 1rem;
+    border-radius: var(--radius);
+    font-size: 0.88rem;
+    margin-bottom: 1.25rem;
+    border: 1px solid transparent;
+}
+.flash-success {
+    background: rgba(var(--success-rgb), 0.12);
+    border-color: rgba(var(--success-rgb), 0.4);
+    color: var(--success-text);
+}
+.flash-error {
+    background: rgba(var(--danger-rgb), 0.12);
+    border-color: rgba(var(--danger-rgb), 0.4);
+    color: var(--danger-text);
+}
+
+.badge-neutral { background: var(--hairline); color: var(--text-muted); }
+.badge-accent  { background: var(--signal-dim); color: var(--signal); }
+.badge-active   { background: rgba(var(--success-rgb), 0.18); color: var(--success-text); }
+.badge-inactive { background: rgba(var(--text-muted-rgb), 0.18); color: var(--text-muted); }
+
+.tag-chip-list { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.tag-chip {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    background: var(--panel-raised);
+    border: 1px solid var(--hairline);
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.no-tags { color: var(--text-muted); font-size: 0.8rem; font-style: italic; }
+
+/* CVE list "show more" disclosure on the vulnerability detail page. Native
+   <details>/<summary> - no JS - same pattern as .qualys-original and
+   .hide-menu elsewhere on this page. The two label spans inside the summary
+   swap visibility off the [open] attribute, so the button text itself flips
+   between "+N more" and "Show less" without any script. */
+.cve-more { margin-top: 0.5rem; }
+.cve-more-summary {
+    cursor: pointer;
+    display: inline-block;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--signal);
+    user-select: none;
+    list-style: none;
+}
+.cve-more-summary::-webkit-details-marker { display: none; }
+.cve-more-summary::marker { display: none; content: ""; }
+.cve-more-summary:hover { text-decoration: underline; }
+.cve-more-label-open { display: none; }
+.cve-more[open] .cve-more-label-closed { display: none; }
+.cve-more[open] .cve-more-label-open { display: inline; }
+.cve-more-list { margin-top: 0.5rem; }
+
+.btn-sm {
+    padding: 0.3rem 0.65rem;
+    font-size: 0.78rem;
+}
+
+.actions-cell {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+.actions-cell form { display: inline; margin: 0; }
+
+/* ------------------------------------------------------------------ */
+/* Tag combobox (multi-select with checkboxes; Manage Users forms)      */
+/* ------------------------------------------------------------------ */
+
+.tag-combo-row {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin: 0.5rem 0 1rem;
+}
+
+.tag-combo {
+    position: relative;
+    width: 260px;
+    max-width: 100%;
+}
+
+.tag-combo-toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.55rem 0.7rem;
+    background: var(--ink);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: var(--font-display);
+    font-size: 0.9rem;
+    cursor: pointer;
+    text-align: left;
+}
+.tag-combo-toggle:hover { border-color: var(--signal); }
+
+.tag-combo-toggle-label { font-weight: 500; flex-shrink: 0; }
+
+.tag-combo-summary {
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-left: auto;
+}
+
+.tag-combo-toggle::after {
+    content: '';
+    width: 7px;
+    height: 7px;
+    border-right: 2px solid var(--text-muted);
+    border-bottom: 2px solid var(--text-muted);
+    transform: rotate(45deg);
+    margin-left: 0.15rem;
+    flex-shrink: 0;
+    transition: transform 0.15s ease;
+}
+.tag-combo[data-open="true"] .tag-combo-toggle::after { transform: rotate(-135deg); }
+
+.tag-combo-panel {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    z-index: 20;
+    width: 100%;
+    min-width: 260px;
+    background: var(--panel);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-card);
+    padding: 0.6rem;
+}
+
+.tag-combo-search {
+    width: 100%;
+    padding: 0.45rem 0.6rem;
+    margin-bottom: 0.5rem;
+    background: var(--ink);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: var(--font-display);
+    font-size: 0.85rem;
+}
+.tag-combo-search:focus { border-color: var(--signal); }
+
+.tag-combo-actions {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 0.4rem;
+}
+.tag-combo-actions button {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--signal);
+    font-size: 0.78rem;
+    cursor: pointer;
+}
+.tag-combo-actions button:hover { text-decoration: underline; }
+
+.tag-combo-list {
+    max-height: 220px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.tag-combo-option {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+.tag-combo-option:hover { background: var(--hairline); }
+.tag-combo-option input { accent-color: var(--signal); width: 15px; height: 15px; flex-shrink: 0; }
+
+.tag-combo-empty {
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    font-style: italic;
+    padding: 0.4rem;
+    margin: 0;
+}
+
+.admin-table td, .admin-table th { vertical-align: top; }
+
+/* Manage Users: one compact line per account, with the less-used actions in
+   a full-width row beneath it that "Manage" opens (public/admin/users.php).
+   Middle-aligned rather than top, since rows are now a single line. */
+.admin-table .user-row td { vertical-align: middle; }
+.admin-table .user-row td,
+.admin-table:has(.user-row) th { padding-left: 0.6rem; padding-right: 0.6rem; }
+.admin-table .user-row .badge { margin: 0.1rem 0; }
+.admin-table .nowrap { white-space: nowrap; }
+.actions-nowrap { flex-wrap: nowrap; }
+.actions-nowrap .btn { white-space: nowrap; }
+.admin-table .user-inactive > td { opacity: 0.6; }
+.tag-chip-clip {
+    max-width: 10rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.manage-toggle[aria-expanded="true"] { border-color: var(--signal); color: var(--signal); }
+.manage-toggle[aria-expanded="true"] .manage-caret { display: inline-block; transform: rotate(180deg); }
+.user-row:has(+ .user-manage-row:not([hidden])) td { border-bottom-color: transparent; }
+.user-manage-row > td { background: var(--panel-raised); padding: 0.75rem 0.9rem 0.9rem; }
+.vuln-table tbody tr.user-manage-row:hover { background: none; }
+.user-manage {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 2rem;
+}
+.user-manage-group h3 {
+    margin: 0 0 0.4rem;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
+.user-manage-password { margin-top: 0.4rem; gap: 0.4rem; align-items: center; }
+.user-manage-password input { width: 14rem; }
+.user-manage-devices { margin: 0 0 0.5rem; padding-left: 1.1rem; font-size: 0.8rem; }
+.user-manage-devices li { margin-bottom: 0.3rem; }
+
+.inline-form-row {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    align-items: flex-end;
+}
+
+.edit-panel {
+    border: 1px solid var(--signal);
+    background: var(--signal-dim);
+}
+
+.section-divider {
+    border: none;
+    border-top: 1px solid var(--hairline);
+    margin: 1.25rem 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* Vulnerability detail page                                            */
+/* ------------------------------------------------------------------ */
+
+.detail-heading-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.detail-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.badge-ce-fail { background: var(--sev-critical); color: #FCECEC; }
+.badge-ce-pass { background: var(--sev-low); color: #E9F5EF; }
+
+.detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.detail-grid .panel { margin-bottom: 0; }
+
+.kv-list {
+    margin: 0;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.4rem 1rem;
+}
+
+.kv-list dt {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+}
+
+.kv-list dd {
+    margin: 0;
+    font-size: 0.9rem;
+    word-break: break-word;
+}
+
+.qualys-richtext {
+    font-size: 0.92rem;
+    line-height: 1.6;
+}
+
+.qualys-richtext p { margin: 0 0 0.85rem; }
+.qualys-richtext p:last-child { margin-bottom: 0; }
+.qualys-richtext ul,
+.qualys-richtext ol { margin: 0 0 0.85rem; padding-left: 1.4rem; }
+.qualys-richtext a { color: var(--signal); }
+
+.evidence-block {
+    background: var(--ink);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+    padding: 0.9rem 1rem;
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 420px;
+    overflow-y: auto;
+    margin: 0;
+}
+
+.tag-chip-list a.tag-chip {
+    cursor: pointer;
+}
+.tag-chip-list a.tag-chip:hover {
+    text-decoration: none;
+    background: var(--hairline);
+}
+
+/* ------------------------------------------------------------------ */
+/* Dashboard stat cards are now links through to a filtered list        */
+/* ------------------------------------------------------------------ */
+
+a.stat-card {
+    color: inherit;
+    text-decoration: none;
+    transition: background-color 0.15s ease;
+}
+a.stat-card:hover {
+    background: var(--panel-raised);
+    text-decoration: none;
+}
+
+/* ------------------------------------------------------------------ */
+/* Sync status panel (dashboard, admin only)                            */
+/* ------------------------------------------------------------------ */
+
+.sync-status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1px;
+    background: var(--hairline);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-bottom: 1.5rem;
+}
+
+.sync-status-card {
+    background: var(--panel);
+    padding: 0.9rem 1rem;
+    border-top: 3px solid var(--hairline);
+}
+
+.sync-status-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+    font-size: 0.9rem;
+    margin-bottom: 0.35rem;
+}
+
+.sync-status-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.sync-status-detail {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+.sync-status-timestamp {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 0.4rem;
+}
+
+.sync-status-healthy { border-top-color: var(--sev-low); }
+.sync-status-healthy .sync-status-dot { background: var(--sev-low); }
+
+.sync-status-running { border-top-color: var(--signal); }
+.sync-status-running .sync-status-dot { background: var(--signal); }
+
+.sync-status-overdue { border-top-color: var(--sev-medium); }
+.sync-status-overdue .sync-status-dot { background: var(--sev-medium); }
+
+.sync-status-failed { border-top-color: var(--sev-critical); }
+.sync-status-failed .sync-status-dot { background: var(--sev-critical); }
+
+.sync-status-stuck { border-top-color: var(--sev-critical); }
+.sync-status-stuck .sync-status-dot { background: var(--sev-critical); }
+
+.sync-status-never_run { border-top-color: var(--text-muted); }
+.sync-status-never_run .sync-status-dot { background: var(--text-muted); }
+
+/* Succeeding, but QIDs have been missing from the local KB past
+   sync.kb_missing_warn_hours - see MissingKbQidRepository. */
+.sync-status-warning { border-top-color: var(--sev-medium); }
+.sync-status-warning .sync-status-dot { background: var(--sev-medium); }
+
+.sync-status-note {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+    margin-top: 0.4rem;
+    padding-top: 0.4rem;
+    border-top: 1px dashed var(--hairline);
+}
+.sync-status-warning .sync-status-note { color: var(--text); }
+.sync-status-note code { font-size: 0.75rem; word-break: break-all; }
+
+/* ------------------------------------------------------------------ */
+/* Two-factor authentication (public/mfa.php, public/mfa_verify.php)   */
+/* ------------------------------------------------------------------ */
+
+.mfa-status-badge-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.mfa-setup-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    align-items: flex-start;
+    margin: 0.25rem 0 1.25rem;
+}
+
+/* QR codes need a light quiet zone to stay reliably scannable regardless
+   of the app's dark/light theme, so this box is deliberately always
+   white/black rather than following --panel/--text. */
+.mfa-qr-box {
+    background: #FFFFFF;
+    padding: 1rem;
+    border-radius: 8px;
+    border: 1px solid var(--hairline);
+    flex-shrink: 0;
+    line-height: 0;
+}
+.mfa-qr-box svg { display: block; width: 200px; height: 200px; }
+
+.mfa-secret-box {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    background: var(--panel-raised);
+    border: 1px solid var(--hairline);
+    border-radius: 6px;
+    padding: 0.6rem 0.85rem;
+    font-family: var(--font-mono);
+    font-size: 0.95rem;
+    letter-spacing: 0.06em;
+    word-break: break-all;
+    max-width: 320px;
+}
+
+.totp-input {
+    font-family: var(--font-mono);
+    font-size: 1.4rem;
+    letter-spacing: 0.4em;
+    text-align: center;
+    max-width: 9rem;
+}
+
+/* ------------------------------------------------------------------ */
+/* Dashboard logo hero                                                 */
+/* ------------------------------------------------------------------ */
+
+/* Logo + page title, side by side on desktop and stacked on narrow
+   screens. The logo asset (logo-full.jpg) is dark artwork on an opaque
+   white background, so it always sits on its own white "plate": that
+   reads as a deliberate branded panel on the dark theme instead of a
+   raw white rectangle bleeding into the page, and still looks correct
+   on the light theme. */
+.dashboard-hero {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    margin-bottom: 1.75rem;
+}
+
+.dashboard-hero-heading { margin-bottom: 0; }
+
+/* Plain-English posture summary directly under the hero. It restates figures
+   already shown in the stat grid/charts as one readable sentence, so a client
+   glancing at the top of the dashboard gets the headline in words. Muted body
+   colour with the key counts bolded to --text so the numbers carry; the
+   negative top margin tucks it just beneath the hero's own bottom margin. */
+.dashboard-posture {
+    margin: -0.75rem 0 1.75rem;
+    max-width: 72ch;
+    font-size: 1rem;
+    line-height: 1.55;
+    color: var(--text-muted);
+}
+.dashboard-posture strong {
+    color: var(--text);
+    font-weight: 600;
+}
+
+.dashboard-logo-plate {
+    flex-shrink: 0;
+    background: #ffffff;
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+    padding: 0.6rem 0.9rem;
+    box-shadow: var(--shadow-card);
+    line-height: 0;
+}
+
+.dashboard-logo {
+    display: block;
+    height: 56px;
+    width: auto;
+}
+
+@media (max-width: 640px) {
+    .dashboard-hero {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+    .dashboard-logo { height: 48px; }
+}
+
+/* ------------------------------------------------------------------ */
+/* Panel heading row + notes (custom remediation, preferences)         */
+/* ------------------------------------------------------------------ */
+
+/* A panel <h2> with an inline status badge beside it. */
+.panel-heading-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.5rem;
+}
+.panel-heading-row h2 { margin: 0; }
+
+/* Muted explanatory line under a panel heading or form control. */
+.panel-note {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin: 0 0 0.9rem;
+}
+
+/* Admin-authored remediation text: rendered escaped + nl2br (see
+   vulnerability_detail.php), so unlike .qualys-richtext it has no block
+   markup of its own to style - just give it comfortable reading rhythm
+   and preserve any run of spaces the author typed. */
+.custom-remediation-text {
+    font-size: 0.95rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* Collapsible "show the Qualys original for reference" inside the admin
+   editor panel. */
+.qualys-original {
+    margin: 0 0 1rem;
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+    background: var(--ink);
+}
+.qualys-original > summary {
+    cursor: pointer;
+    padding: 0.6rem 0.8rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    user-select: none;
+}
+.qualys-original > summary:hover { color: var(--text); }
+.qualys-original[open] > summary { border-bottom: 1px solid var(--hairline); }
+.qualys-original .qualys-richtext { padding: 0.8rem; }
+
+.form-actions { margin-top: 0.9rem; }
+
+/* The Revert button sits in its own form under the save form; a little
+   separation makes it clearly a distinct, destructive action. */
+.custom-remediation-revert {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--hairline);
+}
+
+/* "Pending" tag pill - a tag pre-created by name whose Qualys ID hasn't been
+   filled in yet (waiting on the first agent carrying it to report). Muted
+   amber so it reads as "not live yet", not as an error, and stays distinct
+   from the solid severity badges above. See public/admin/users.php. */
+.tag-pending {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    background: rgba(212, 160, 45, 0.16);
+    border: 1px solid rgba(212, 160, 45, 0.38);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+/* Agent-uninstall multi-select (Assets page). The checkbox column is kept
+   as narrow as possible so it doesn't steal width from the data columns, and
+   the bulk-action bar sits directly above the table with the selected-count
+   confirm handled in-page. */
+.bulk-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.75rem;
+}
+.bulk-hint {
+    max-width: 62ch;
+}
+.checkbox-col {
+    width: 1%;
+    white-space: nowrap;
+    text-align: center;
+}
+
+/* ===========================================================================
+   Trends page (public/trends.php): movement cards + remediation-aging matrix.
+   Reuses the existing .stat-card / .vuln-table / .badge / .chart-panel styles;
+   everything below is only the extra structure those don't already cover.
+   =========================================================================== */
+
+/* Section headings that separate Movement / Aging / Recently resolved, with a
+   muted sub-label (the active window, or a one-word gloss) beside the title. */
+.section-heading {
+    font-size: 1.05rem;
+    font-weight: 600;
+    margin: 2rem 0 0.75rem;
+}
+.section-heading:first-of-type {
+    margin-top: 1rem;
+}
+.section-heading-sub {
+    color: var(--text-muted);
+    font-weight: 400;
+    font-size: 0.85rem;
+    margin-left: 0.4rem;
+}
+
+/* Movement cards inherit .stat-card; only the accent stripe (semantic per
+   card) and the hint line are new. New = attention (ember), Resolved =
+   positive (success green), Re-opened = warning (amber) - the same palette the
+   severity badges and success/danger states already use, so nothing new is
+   introduced colour-wise. */
+.movement-new      { border-top-color: var(--sev-high); }
+.movement-resolved { border-top-color: rgb(var(--success-rgb)); }
+.movement-reopened { border-top-color: var(--sev-medium); }
+
+.movement-card-hint {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+}
+
+/* The "New findings" card is a link (it maps onto the vulnerability list);
+   give it the affordance the static cards don't have. */
+a.movement-card {
+    color: inherit;
+    transition: background 0.12s ease;
+}
+a.movement-card:hover {
+    background: var(--panel-raised);
+}
+a.movement-card .movement-card-hint {
+    color: var(--signal);
+}
+
+/* Aging matrix - a .vuln-table with numeric cells. Cell links stretch to the
+   whole cell so the click target is the number's padding, not just its glyphs. */
+.aging-matrix td.col-num,
+.aging-matrix th.col-num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+.aging-cell a {
+    display: inline-block;
+    min-width: 1.5rem;
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+}
+/* Empty cells recede; genuinely-aged non-empty cells (31-90d, >90d) read
+   louder, since an old open finding is the thing this table exists to surface. */
+.aging-cell-zero {
+    color: var(--text-muted);
+    opacity: 0.55;
+}
+.aging-cell-aged a {
+    font-weight: 700;
+    color: var(--sev-high);
+}
+.aging-total a {
+    font-weight: 600;
+}
+
+/* Totals footer: a hairline above it to separate sums from the body, and the
+   CE+ overlay row muted since it's a "of which..." subset, not another total. */
+.aging-matrix tfoot td {
+    border-top: 2px solid var(--hairline);
+}
+.aging-foot-total td {
+    font-weight: 600;
+}
+.aging-foot-ceplus td {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    border-top: none;
+}
+
+/* The "CE+ open longer than 30 days" callout beneath the matrix. A quiet
+   tinted strip, not an alarm - it states a fact and offers a drill-in. */
+.aging-ceplus-note {
+    margin: 1rem 0 0;
+    padding: 0.6rem 0.8rem;
+    background: var(--signal-dim);
+    border-radius: var(--radius);
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+.aging-ceplus-note strong {
+    font-variant-numeric: tabular-nums;
+}
+
+/* ===========================================================================
+   Hidden findings + detection-type chips (dashboard "N hidden" reveal toggle,
+   the HIDDEN / Potential chips in the vuln list and detail page, and the admin
+   Hide/Unhide dropdown). Reuses .badge / .btn / .filter-bar; only the pieces
+   those don't already cover are below.
+   =========================================================================== */
+
+/* Potential = an unconfirmed finding. A quiet outline pill so it reads as a
+   qualifier on the title, not another severity. */
+.badge-potential {
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--hairline);
+}
+/* Hidden = amber, matching the reveal chip's "on" state, so a revealed hidden
+   row and the toggle that revealed it read as the same colour of thing. */
+.badge-hidden {
+    background: var(--sev-medium);
+    color: #2B2107;
+}
+
+/* Dashboard / vuln-list reveal chip ("N hidden"). A pill button; the active
+   (revealing) state picks up the same amber as the .badge-hidden rows it's
+   showing, so the link between "toggle on" and "these amber rows" is obvious. */
+.hidden-toggle-row {
+    margin: 0 0 1rem;
+}
+.result-count-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+.result-count-row .result-count {
+    margin: 0;
+}
+.hidden-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.3rem 0.7rem;
+    border-radius: 999px;
+    border: 1px solid var(--hairline);
+    background: var(--panel);
+    color: var(--text);
+    font-size: 0.82rem;
+    transition: background 0.12s ease, border-color 0.12s ease;
+}
+.hidden-chip:hover {
+    background: var(--panel-raised);
+}
+.hidden-chip strong {
+    font-variant-numeric: tabular-nums;
+}
+.hidden-chip-icon {
+    width: 15px;
+    height: 15px;
+    flex: 0 0 auto;
+}
+.hidden-chip-active {
+    background: rgba(201, 154, 58, 0.16);   /* --sev-medium amber, tinted */
+    border-color: var(--sev-medium);
+    color: var(--text);
+}
+
+/* Admin Hide/Unhide control on the detail page - a native <details> dropdown
+   (no JS), the panel floated below the trigger like the account menu. */
+.visibility-control {
+    margin: 0 0 1.5rem;
+}
+.hide-menu {
+    position: relative;
+    display: inline-block;
+}
+.hide-menu-summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    cursor: pointer;
+    list-style: none;
+}
+.hide-menu-summary::-webkit-details-marker {
+    display: none;   /* strip the default disclosure triangle (WebKit/Blink) */
+}
+.hide-menu-summary::marker {
+    content: "";     /* ...and Firefox */
+}
+.hide-menu-summary .icon-chevron {
+    width: 15px;
+    height: 15px;
+    transition: transform 0.15s ease;
+}
+.hide-menu[open] .hide-menu-summary .icon-chevron {
+    transform: rotate(180deg);
+}
+.hide-menu-panel {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    min-width: 230px;
+    display: flex;
+    flex-direction: column;
+    padding: 0.35rem;
+    background: var(--panel-raised);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-card);
+    z-index: 40;
+}
+.hide-menu-option {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 0.5rem 0.6rem;
+    background: none;
+    border: none;
+    border-radius: calc(var(--radius) - 2px);
+    color: var(--text);
+    font: inherit;
+    cursor: pointer;
+}
+.hide-menu-option:hover {
+    background: var(--row-hover);
+}
+.visibility-note {
+    margin: 0.6rem 0 0;
+    color: var(--text-muted);
+    font-size: 0.83rem;
+    max-width: 60ch;
+}
+
+/* ===========================================================================
+   Exploitability intelligence (CISA KEV + FIRST EPSS)
+   ---------------------------------------------------------------------------
+   Surfaces on the vulnerability list, detail page and dashboard. Reuses the
+   existing .badge / .stat-card / .kv-list styles; only the pieces those don't
+   already cover are below. See src/Lib/ExploitIntelRepository.php and
+   database/migrations/2026-07-add-exploit-intel.sql.
+   =========================================================================== */
+
+/* Small inline de-emphasis helper (didn't exist before; used for the EPSS raw
+   score / percentile and the KEV CVE annotation). */
+.muted { color: var(--text-muted); }
+
+/* KEV = on CISA's Known Exploited Vulnerabilities catalogue: confirmed
+   exploited in the wild, the strongest "act on this first" signal. A solid
+   danger-red pill, deliberately heavier than the CVSS severity badges so it
+   still stands out sitting next to a Critical. */
+.badge-kev {
+    background: rgba(var(--danger-rgb), 0.92);
+    color: #fff;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+/* KEV stat card on the dashboard - danger-red accent stripe, matching the
+   badge, distinct from the severity cards' stripes. */
+.stat-card.stat-card-kev { border-top-color: rgba(var(--danger-rgb), 0.9); }
+
+/* KEV callout banner on the detail page - a danger-tinted note box (same
+   colour family as .flash-error) drawing the eye to an actively-exploited
+   finding, with room for the CISA due date and ransomware note. */
+.kev-callout {
+    display: flex;
+    gap: 0.6rem;
+    align-items: flex-start;
+    padding: 0.75rem 1rem;
+    margin: 0 0 1.5rem;
+    border-radius: var(--radius);
+    background: rgba(var(--danger-rgb), 0.1);
+    border: 1px solid rgba(var(--danger-rgb), 0.4);
+    color: var(--danger-text);
+    line-height: 1.45;
+}
+.kev-callout-icon {
+    width: 20px;
+    height: 20px;
+    flex: 0 0 auto;
+    margin-top: 0.1rem;
+    color: rgba(var(--danger-rgb), 0.95);
+}
+.kev-callout strong { color: var(--text); }
+.kev-callout .muted { color: var(--text-muted); }
+
+/* --------------------------------------------------------------------------
+   Risk score gauge (dashboard hero). Semicircular analog dial; the arc zones
+   and needle reuse the severity colour scale (--sev-*), so the gauge reads in
+   the same palette as the severity cards. See src/views/risk_gauge.php.
+   -------------------------------------------------------------------------- */
+.risk-panel {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+}
+.risk-gauge-wrap {
+    flex: 1 1 300px;
+    max-width: 380px;
+    min-width: 260px;
+}
+.risk-meta {
+    flex: 1 1 240px;
+    min-width: 220px;
+}
+.risk-gauge {
+    width: 100%;
+    height: auto;
+    display: block;
+    font-family: var(--font-display);
+    overflow: visible;
+}
+/* Backing track + coloured zones share the same thick round-capped stroke. */
+.risk-gauge-track {
+    fill: none;
+    stroke: var(--panel-raised);
+    stroke-width: 20;
+    stroke-linecap: round;
+}
+.risk-gauge-zone {
+    fill: none;
+    stroke-width: 20;
+    stroke-linecap: round;
+}
+.risk-gauge-zone.sev-low      { stroke: var(--sev-low); }
+.risk-gauge-zone.sev-medium   { stroke: var(--sev-medium); }
+.risk-gauge-zone.sev-high     { stroke: var(--sev-high); }
+.risk-gauge-zone.sev-critical { stroke: var(--sev-critical); }
+
+.risk-gauge-end {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    fill: var(--text-muted);
+}
+/* Needle takes the current band's colour; hub is a neutral pivot. */
+.risk-gauge-needle          { stroke: var(--panel); stroke-width: 1; }
+.risk-gauge-needle.sev-low      { fill: var(--sev-low); }
+.risk-gauge-needle.sev-medium   { fill: var(--sev-medium); }
+.risk-gauge-needle.sev-high     { fill: var(--sev-high); }
+.risk-gauge-needle.sev-critical { fill: var(--sev-critical); }
+.risk-gauge-hub {
+    fill: var(--text);
+    stroke: var(--panel);
+    stroke-width: 2;
+}
+.risk-gauge-score {
+    font-size: 46px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+}
+.risk-gauge-score.sev-low      { fill: var(--sev-low); }
+.risk-gauge-score.sev-medium   { fill: var(--sev-medium); }
+.risk-gauge-score.sev-high     { fill: var(--sev-high); }
+.risk-gauge-score.sev-critical { fill: var(--sev-critical); }
+.risk-gauge-band {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    fill: var(--text-muted);
+}
+.risk-meta-title { font-size: 1.05rem; margin: 0 0 0.5rem; font-weight: 600; }
+.risk-meta-note  { color: var(--text-muted); font-size: 0.9rem; margin: 0 0 1rem; line-height: 1.5; }
+.risk-meta-stats { display: flex; flex-wrap: wrap; gap: 1.25rem; margin: 0; }
+.risk-meta-stats div { margin: 0; }
+.risk-meta-stats dt { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin: 0 0 0.15rem; }
+.risk-meta-stats dd { font-size: 1.4rem; font-weight: 700; margin: 0; font-family: var(--font-display); }
+
+/* --------------------------------------------------------------------------
+   "Not reporting" chip in the Assets list's Last scan column, standing in for
+   the date (see public/assets.php and StaleAgent::shortLabel()). It keeps
+   .badge.sev-medium's amber but drops the severity lozenge's fixed min-width
+   and lets it never wrap, so it sits on one line at the same height as the
+   dates around it. Must stay below the .badge.sev-* rules above - same
+   specificity, so source order decides.
+   -------------------------------------------------------------------------- */
+.badge.badge-stale {
+    min-width: 0;
+    white-space: nowrap;
+    padding: 0.1rem 0.5rem;
+    font-size: 0.72rem;
+    line-height: 1.5;
+    cursor: help;
+}
+
+/* --------------------------------------------------------------------------
+   On-demand scan request chip, after the date (or the "Not reporting" chip)
+   in the Assets list's Last scan column - see public/assets.php
+   scanRequestChip(). Same compact size as .badge-stale so the two read as a
+   pair; colour comes from .badge-accent (queued/requested) or .badge-neutral
+   (failed). The cell keeps date and chip on one line rather than stacking.
+   -------------------------------------------------------------------------- */
+.last-scan-cell {
+    white-space: nowrap;
+}
+.badge.badge-scan {
+    padding: 0.1rem 0.5rem;
+    margin-left: 0.35rem;
+    font-size: 0.72rem;
+    line-height: 1.5;
+    cursor: help;
+}
+
+/* --------------------------------------------------------------------------
+   CE+ readiness page (public/ce_readiness.php). Reuses .stat-card,
+   .vuln-table, .badge and .chart-panel; only the pieces those don't cover.
+   Card stripes follow the Trends movement cards' palette: fail = the CE+
+   red family, at risk = amber, pass = success green.
+   -------------------------------------------------------------------------- */
+/* Four cards, not the base grid's five - otherwise a blank fifth cell. Only
+   above the 900px breakpoint, so the existing 3- and 2-column mobile rules
+   (earlier in this file, same specificity) still win on small screens. */
+@media (min-width: 901px) {
+    .readiness-grid { grid-template-columns: repeat(4, 1fr); }
+}
+
+.readiness-fail { border-top-color: rgba(var(--danger-rgb), 0.9); }
+.readiness-risk { border-top-color: var(--sev-medium); }
+.readiness-pass { border-top-color: rgb(var(--success-rgb)); }
+
+.readiness-projection {
+    background: var(--panel);
+    border: 1px solid var(--hairline);
+    border-left: 3px solid var(--signal);
+    border-radius: var(--radius);
+    padding: 0.8rem 1rem;
+    margin-bottom: 1rem;
+    font-size: 0.92rem;
+    line-height: 1.5;
+}
+
+.readiness-note {
+    color: var(--text-muted);
+    font-size: 0.82rem;
+}
+
+.readiness-caveats {
+    list-style: none;
+    margin: 0 0 1.25rem;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    font-size: 0.86rem;
+    color: var(--text-muted);
+}
+
+.readiness-date-form {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin: 0;
+}
+.readiness-date-form input[type="date"] {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    padding: 0.25rem 0.4rem;
+    background: var(--panel-raised);
+    color: inherit;
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+}
+
+/* Status filter above the host list - links, not a form, so each view is a
+   plain bookmarkable URL. */
+.readiness-status-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin: 0 0 0.75rem;
+}
+.readiness-tab {
+    padding: 0.25rem 0.7rem;
+    border-radius: 999px;
+    border: 1px solid var(--hairline);
+    background: var(--panel-raised);
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    text-decoration: none;
+}
+.readiness-tab:hover { color: var(--text); }
+.readiness-tab-active {
+    background: var(--signal-dim);
+    border-color: var(--signal);
+    color: var(--signal);
+}
+
+/* --------------------------------------------------------------------------
+   Search (public/search.php) and its header icon link.
+   -------------------------------------------------------------------------- */
+.nav-search {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+.nav-search svg { width: 18px; height: 18px; }
+/* The search icon took the admin nav just past one line at ~1300px,
+   wrapping two-word links ("CE+ Readiness", "Manage Users"). A slightly
+   tighter gap makes room. Not nowrap: on narrower desktops (861-1150px)
+   that pushes the admin nav off the right edge, and wrapping is the
+   better fallback. The mobile dropdown has its own layout. */
+@media (min-width: 861px) {
+    .site-nav { gap: 1.2rem; }
+}
+/* Between the hamburger breakpoint and ~1200px the admin nav (two more
+   links than a client's) no longer fits on one line now that CE+ Readiness
+   and the search icon have been added. Tighten it there, so it matches what
+   the nav fitted in before. */
+@media (min-width: 861px) and (max-width: 1199px) {
+    .site-nav { gap: 0.85rem; font-size: 0.84rem; }
+    .site-nav .user-chip { padding: 0.25rem 0.5rem; }
+}
+/* Icon-only in the desktop nav; the label shows in the mobile dropdown. */
+.nav-search-label { display: none; }
+@media (max-width: 860px) {
+    .nav-search-label { display: inline; }
+}
+
+.search-page-form { align-items: flex-end; }
+/* flex-grow + min-width rather than a 320px flex-basis: the mobile
+   .filter-bar stacks into a column, where a basis would set the height. */
+.search-page-field { flex-grow: 1; min-width: min(100%, 320px); }
+/* Once .filter-bar stacks (640px, above), the form's align-items:flex-end
+   would push the field to the right edge - make it full width instead. */
+@media (max-width: 640px) {
+    .search-page-field { width: 100%; }
+}
+.search-page-field input {
+    width: 100%;
+    font-size: 1rem;
+}
+
+/* The verdict on a CVE/QID search. Three states, deliberately three
+   colours: affected (CE+ red family), not affected (success green) and
+   can't tell (amber) - "can't tell" must never read like a pass. */
+.search-verdict {
+    padding: 1rem 1.25rem;
+    border-radius: var(--radius);
+    border: 1px solid var(--hairline);
+    margin-bottom: 1rem;
+    line-height: 1.55;
+}
+.search-verdict strong {
+    font-family: var(--font-mono);
+    font-size: 1.05rem;
+    margin-right: 0.35rem;
+}
+.search-verdict .readiness-note { display: block; margin-top: 0.3rem; }
+.search-verdict-affected {
+    background: rgba(var(--danger-rgb), 0.1);
+    border-color: rgba(var(--danger-rgb), 0.35);
+}
+.search-verdict-clear {
+    background: rgba(var(--success-rgb), 0.1);
+    border-color: rgba(var(--success-rgb), 0.35);
+}
+.search-verdict-unknown {
+    background: var(--panel);
+    border-left: 3px solid var(--sev-medium);
+}
+
+.search-resolved {
+    color: var(--text-muted);
+    font-size: 0.88rem;
+    margin: 0 0 1rem;
+}
+.search-help { max-width: 760px; }
