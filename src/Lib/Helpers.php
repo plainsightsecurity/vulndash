@@ -703,4 +703,18 @@ class Helpers
         }
         return (int)min(100, round($pct)) . '%';
     }
+
+    /**
+     * Hover text for an epssPercent() value: the exact percentage to two
+     * places, so a "<1%" can be told apart (0.04% vs 0.9%) and a rounded
+     * "10%" that's really 9.7% shows why it missed the 10% risk multiplier.
+     * A non-zero score too small for two places shows as "<0.01%" rather
+     * than a misleading "0.00%". Plain text; escape it for HTML.
+     */
+    public static function epssTooltip(float $epss): string
+    {
+        $pct = $epss * 100;
+        $exact = ($pct > 0 && $pct < 0.005) ? '<0.01%' : number_format($pct, 2) . '%';
+        return $exact . ' chance of exploitation in the next 30 days (FIRST EPSS)';
+    }
 }

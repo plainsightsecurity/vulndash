@@ -14,3 +14,11 @@ test('EPSS shown as a whole-number percentage', function () {
     eq(Helpers::epssPercent(0.0995), '10%', 'nearest, not ceil');
     eq(Helpers::epssPercent(1.0), '100%');
 });
+
+test('EPSS tooltip gives the exact percentage', function () {
+    eq(Helpers::epssTooltip(0.0972), '9.72% chance of exploitation in the next 30 days (FIRST EPSS)');
+    eq(Helpers::epssTooltip(0.00043), '0.04% chance of exploitation in the next 30 days (FIRST EPSS)');
+    eq(Helpers::epssTooltip(0.00002), '<0.01% chance of exploitation in the next 30 days (FIRST EPSS)', 'tiny but scored');
+    eq(Helpers::epssTooltip(0.0), '0.00% chance of exploitation in the next 30 days (FIRST EPSS)');
+    eq(Helpers::epssTooltip(1.0), '100.00% chance of exploitation in the next 30 days (FIRST EPSS)');
+});
