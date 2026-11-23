@@ -164,15 +164,16 @@ $availableTagIds = array_map('intval', array_column($availableTags, 'id'));
 // session - see Helpers::resolveViewTag() for exactly how.
 $viewTagId = Helpers::resolveViewTag($availableTagIds);
 
-// Tags this account can see that have an agent activation ID (set by an admin
-// in Manage Users > Tags) - what the "Install agent" overlay offers. Scoped by
-// $availableTags, so a client only ever gets their own tags' IDs. When one tag
-// is being viewed, only that tag counts: no ID on it, no button.
-$installTags = AgentInstall::installableTags($availableTags);
-if ($viewTagId !== null) {
-    $installTags = array_values(array_filter($installTags, static fn (array $it): bool => $it['id'] === $viewTagId));
+// The tag whose install commands the "Install agent" overlay shows: only the
+// one tag being viewed, and only if it has an agent activation ID (set by an
+// admin in Manage Users > Tags). No button on the all-tags view. $viewTagId is
+// already limited to $availableTags, so a client only ever gets its own IDs.
+$installTag = null;
+foreach (AgentInstall::installableTags($availableTags) as $it) {
+    if ($it['id'] === $viewTagId) {
+        $installTag = $it;
+    }
 }
-$installDefaultTagId = $installTags !== [] ? $installTags[0]['id'] : null;
 
 $page    = max(1, (int)($_GET['page'] ?? 1));
 $perPage = 50;
@@ -215,16 +216,15 @@ require __DIR__ . '/../src/views/header.php';
             <?= !$isAdmin ? 'Your assigned assets' : 'All assets' ?><?= $viewTagId !== null ? ', filtered to one tag' : '' ?> - click a hostname to see its open vulnerabilities.
         </p>
     </div>
-    <?php if ($installTags !== []): ?>
+    <?php if ($installTag !== null): ?>
     <button type="button" class="btn btn-primary" id="installAgentOpen" aria-haspopup="dialog">Install agent</button>
     <?php endif; ?>
 </div>
 
-<?php if ($installTags !== []): ?>
+<?php if ($installTag !== null): ?>
 <!-- "Install agent" overlay: the same one-line install commands as the CE+
-     onboarding instructions, per tag. Every tag's commands are rendered up
-     front and the tag picker just shows one set, so it works without a round
-     trip; a native <dialog> gives focus trapping and Escape-to-close for free. -->
+     onboarding instructions, for the tag being viewed. A native <dialog>
+     gives focus trapping and Escape-to-close for free. -->
 <dialog class="install-dialog" id="installAgentDialog" aria-labelledby="installAgentTitle">
     <div class="install-dialog-head">
         <h2 id="installAgentTitle">Install the Qualys agent</h2>
@@ -235,56 +235,41 @@ require __DIR__ . '/../src/views/header.php';
         administrator. The new agent appears under Assets after it first reports to Qualys and
         the next dashboard sync runs.
     </p>
-    <?php if (count($installTags) > 1): ?>
-    <label class="field install-tag-picker">
-        <span>Tag</span>
-        <select id="installAgentTag">
-            <?php foreach ($installTags as $it): ?>
-            <option value="<?= $it['id'] ?>"<?= $it['id'] === $installDefaultTagId ? ' selected' : '' ?>><?= Helpers::e($it['name']) ?></option>
-            <?php endforeach; ?>
-        </select>
-    </label>
-    <?php endif; ?>
+    <p class="install-activation">
+        <?= Helpers::e($installTag['name']) ?> - activation ID
+        <span class="mono"><?= Helpers::e($installTag['activation_id']) ?></span>, already built into the commands.
+    </p>
 
-    <?php foreach ($installTags as $it): ?>
-    <div class="install-set" data-install-tag="<?= $it['id'] ?>"<?= $it['id'] === $installDefaultTagId ? '' : ' hidden' ?>>
-        <p class="install-activation">
-            <?= count($installTags) === 1 ? Helpers::e($it['name']) . ' - activation' : 'Activation' ?>
-            ID <span class="mono"><?= Helpers::e($it['activation_id']) ?></span>, already built into the commands.
-        </p>
-
-        <h3>Windows</h3>
-        <p>Paste into PowerShell opened as Administrator. Can also be deployed through an RMM tool.</p>
-        <div class="install-command">
-            <code><?= Helpers::e($it['windows']) ?></code>
-            <button type="button" class="btn btn-sm btn-secondary" data-copy>Copy</button>
-        </div>
-        <details class="install-help">
-            <summary>How do I open PowerShell as an Administrator?</summary>
-            <ol>
-                <li>Click Start and type <strong>PowerShell</strong>.</li>
-                <li>Right-click <strong>Windows PowerShell</strong> and choose <strong>Run as administrator</strong>.</li>
-                <li>When Windows asks for permission, enter the username and password of an administrator account and click <strong>Yes</strong>. You don't need to be signed in to Windows as an administrator.</li>
-                <li>Paste the command (right-click or Ctrl+V) and press Enter.</li>
-            </ol>
-        </details>
-
-        <h3>macOS / Linux</h3>
-        <p>Paste into Terminal from an account with administrator (sudo) rights. It will ask for that account's password - nothing shows as you type it.</p>
-        <div class="install-command">
-            <code><?= Helpers::e($it['unix']) ?></code>
-            <button type="button" class="btn btn-sm btn-secondary" data-copy>Copy</button>
-        </div>
-        <details class="install-help">
-            <summary>How do I open Terminal?</summary>
-            <ol>
-                <li>macOS: press Cmd+Space, type <strong>Terminal</strong> and press Return.</li>
-                <li>Linux: press Ctrl+Alt+T, or open <strong>Terminal</strong> from the applications menu.</li>
-                <li>Paste the command (Cmd+V on macOS, Ctrl+Shift+V on Linux) and press Enter.</li>
-            </ol>
-        </details>
+    <h3>Windows</h3>
+    <p>Paste into PowerShell opened as Administrator. Can also be deployed through an RMM tool.</p>
+    <div class="install-command">
+        <code><?= Helpers::e($installTag['windows']) ?></code>
+        <button type="button" class="btn btn-sm btn-secondary" data-copy>Copy</button>
     </div>
-    <?php endforeach; ?>
+    <details class="install-help">
+        <summary>How do I open PowerShell as an Administrator?</summary>
+        <ol>
+            <li>Click Start and type <strong>PowerShell</strong>.</li>
+            <li>Right-click <strong>Windows PowerShell</strong> and choose <strong>Run as administrator</strong>.</li>
+            <li>When Windows asks for permission, enter the username and password of an administrator account and click <strong>Yes</strong>. You don't need to be signed in to Windows as an administrator.</li>
+            <li>Paste the command (right-click or Ctrl+V) and press Enter.</li>
+        </ol>
+    </details>
+
+    <h3>macOS / Linux</h3>
+    <p>Paste into Terminal from an account with administrator (sudo) rights. It will ask for that account's password - nothing shows as you type it.</p>
+    <div class="install-command">
+        <code><?= Helpers::e($installTag['unix']) ?></code>
+        <button type="button" class="btn btn-sm btn-secondary" data-copy>Copy</button>
+    </div>
+    <details class="install-help">
+        <summary>How do I open Terminal?</summary>
+        <ol>
+            <li>macOS: press Cmd+Space, type <strong>Terminal</strong> and press Return.</li>
+            <li>Linux: press Ctrl+Alt+T, or open <strong>Terminal</strong> from the applications menu.</li>
+            <li>Paste the command (Cmd+V on macOS, Ctrl+Shift+V on Linux) and press Enter.</li>
+        </ol>
+    </details>
 
     <p class="install-note">Each command may wrap on screen, but Copy always copies it as one line.</p>
 </dialog>
@@ -437,7 +422,7 @@ function confirmBulkAction(form, submitter) {
     );
 }
 
-// "Install agent" overlay: open/close, tag picker, copy buttons.
+// "Install agent" overlay: open/close, copy buttons.
 (function () {
     var dialog = document.getElementById('installAgentDialog');
     var openBtn = document.getElementById('installAgentOpen');
@@ -451,15 +436,6 @@ function confirmBulkAction(form, submitter) {
     dialog.addEventListener('click', function (e) {
         if (e.target === dialog) dialog.close();
     });
-
-    var picker = document.getElementById('installAgentTag');
-    if (picker) {
-        picker.addEventListener('change', function () {
-            dialog.querySelectorAll('.install-set').forEach(function (set) {
-                set.hidden = set.getAttribute('data-install-tag') !== picker.value;
-            });
-        });
-    }
 
     // Copies the <code> text, which is always one line - the wrapping is CSS only.
     function fallbackCopy(text) {

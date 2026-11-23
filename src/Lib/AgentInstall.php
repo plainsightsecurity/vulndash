@@ -54,8 +54,8 @@ final class AgentInstall
 
     /**
      * The tags out of $tags (rows with id, name, agent_activation_id) that
-     * have a usable activation ID, each with its two commands - what the
-     * overlay offers. Empty means no "Install agent" button at all.
+     * have a usable activation ID, each with its two commands. The Assets
+     * page shows the button only for the one tag being viewed, if it's here.
      *
      * @param array<int, array<string, mixed>> $tags
      * @return array<int, array{id: int, name: string, activation_id: string, windows: string, unix: string}>

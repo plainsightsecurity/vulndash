@@ -56,32 +56,34 @@ test('a client cannot set an activation ID', function () {
     eq(Database::getConnection()->query('SELECT agent_activation_id FROM tags WHERE id = 1')->fetchColumn(), null);
 });
 
-test('the Install agent overlay only offers the account its own tags', function () {
+test('the Install agent button only shows for a viewed tag with an activation ID', function () {
     seed_estate();
-    $page = render_page('assets.php', '', 'client');
-    ok(!str_contains($page, 'id="installAgentOpen"'), 'no button when no tag has an ID');
+    $pdo = Database::getConnection();
+    $page = render_page('assets.php', 'view_tag=1', 'client');
+    ok(!str_contains($page, 'id="installAgentOpen"'), 'no button when the tag has no ID');
 
-    Database::getConnection()->exec("UPDATE tags SET agent_activation_id = '" . ID_B . "' WHERE id = 2");
-    $page = render_page('assets.php', '', 'client');
-    ok(!str_contains($page, 'id="installAgentOpen"'), 'another tenant\'s ID gives this client no button');
-    ok(!str_contains($page, ID_B), 'and never leaks');
+    $pdo->exec("UPDATE tags SET agent_activation_id = '" . ID_A . "' WHERE id = 1");
+    $pdo->exec("UPDATE tags SET agent_activation_id = '" . ID_B . "' WHERE id = 2");
 
-    Database::getConnection()->exec("UPDATE tags SET agent_activation_id = '" . ID_A . "' WHERE id = 1");
     $page = render_page('assets.php', '', 'client');
-    ok(!str_contains($page, 'PHPERR'), 'no PHP errors');
-    ok(str_contains($page, 'id="installAgentOpen"'), 'button shown');
+    ok(!str_contains($page, 'id="installAgentOpen"'), 'no button on the all-tags view');
+
+    $page = render_page('assets.php', 'view_tag=1', 'client');
+    ok(!str_contains($page, 'PHPERR'), 'no PHP errors: ' . $page);
+    ok(str_contains($page, 'id="installAgentOpen"'), 'button shown for the viewed tag');
     ok(str_contains($page, 'sudo bash -s ' . ID_A), 'unix command with own ID');
     ok(str_contains($page, '-ActivationID ' . ID_A), 'windows command with own ID');
-    ok(!str_contains($page, ID_B), 'other tenant still absent');
-    ok(!str_contains($page, 'id="installAgentTag"'), 'no tag picker for a single tag');
+    ok(!str_contains($page, ID_B), 'other tenant absent');
+
+    $page = render_page('assets.php', 'view_tag=2', 'client');
+    ok(!str_contains($page, 'id="installAgentOpen"') && !str_contains($page, ID_B), 'another tenant\'s tag gives no button and never leaks');
 
     $page = render_page('assets.php', '', 'admin');
-    ok(str_contains($page, ID_A) && str_contains($page, ID_B), 'admin gets every tag');
-    ok(str_contains($page, 'id="installAgentTag"'), 'with a tag picker');
-
-    Database::getConnection()->exec('UPDATE tags SET agent_activation_id = NULL WHERE id = 2');
+    ok(!str_contains($page, 'id="installAgentOpen"'), 'admin all-tags view: no button');
     $page = render_page('assets.php', 'view_tag=2', 'admin');
-    ok(!str_contains($page, 'id="installAgentOpen"'), 'viewing a tag with no ID: no button');
-    $page = render_page('assets.php', 'view_tag=1', 'admin');
-    ok(str_contains($page, 'id="installAgentOpen"') && !str_contains($page, 'id="installAgentTag"'), 'viewing a tag with an ID: just that tag');
+    ok(str_contains($page, ID_B) && !str_contains($page, ID_A), 'admin viewing a tag gets just that tag');
+
+    $pdo->exec('UPDATE tags SET agent_activation_id = NULL WHERE id = 2');
+    $page = render_page('assets.php', 'view_tag=2', 'admin');
+    ok(!str_contains($page, 'id="installAgentOpen"'), 'viewed tag with no ID: no button');
 });

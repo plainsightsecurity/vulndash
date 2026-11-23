@@ -2801,7 +2801,6 @@ a.movement-card .movement-card-hint {
 .install-dialog-close:hover { color: var(--text); }
 .install-intro, .install-note { color: var(--text-muted); }
 .install-note { margin-top: 1.2rem !important; font-size: 0.8rem !important; }
-.install-tag-picker { max-width: 22rem; margin: 0.75rem 0 0.25rem; }
 .install-activation { color: var(--text-muted); margin-top: 0.75rem !important; }
 .install-activation .mono { color: var(--text); }
 

@@ -333,11 +333,11 @@ A few things worth knowing about how it behaves:
   is usually what you want for someone leaving temporarily.
 - **Agent activation ID** (Tags table, `tags.agent_activation_id`): set a
   tag's Cloud Agent activation ID and every account that can see the tag
-  gets an **Install agent** button on the Assets page. It opens an overlay
-  with the Windows (PowerShell) and macOS/Linux install one-liners - the
-  same ones as the CE+ onboarding instructions - with the ID filled in and
-  a Copy button for each. Accounts with several such tags pick one from a
-  dropdown. Blank = no install command for that tag. Only UUIDs are
+  gets an **Install agent** button on the Assets page while that tag is
+  selected in the Tags filter (not on the all-tags view). It opens an
+  overlay with the Windows (PowerShell) and macOS/Linux install one-liners,
+  the same ones as the CE+ onboarding instructions, with the ID filled in
+  and a Copy button for each. Blank = no install command for that tag. Only UUIDs are
   accepted, since the ID ends up in a command run as administrator. The
   command text lives in `src/Lib/AgentInstall.php`. This is separate from
   the Qualys identifier column, which is what links the tag to Qualys data.
