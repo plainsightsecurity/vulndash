@@ -14,7 +14,13 @@ class Config
     public static function get(string $key)
     {
         if (self::$data === null) {
-            self::$data = require __DIR__ . '/../config/config.php';
+            // VULNDASH_CONFIG lets the test suite (tests/run.sh) point at
+            // tests/config.test.php so running tests can never read or
+            // overwrite the live src/config/config.php. Nothing on the
+            // server sets it, and Apache doesn't pass arbitrary environment
+            // variables through to PHP, so production always takes the default.
+            $path = getenv('VULNDASH_CONFIG') ?: __DIR__ . '/../config/config.php';
+            self::$data = require $path;
         }
 
         $value = self::$data;

@@ -1,0 +1,46 @@
+# Runs tests/run.sh on every push: PHP lint, install_schema.sql + migrations,
+# unit/integration tests and page smoke tests, against MySQL 8.0 and PHP 8.3
+# to match production. A red cross against a commit on GitHub means don't
+# run deploy-dashboard until it's fixed.
+name: Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    services:
+      mysql:
+        image: mysql:8.0   # official image loads the time zone tables Database.php needs
+        env:
+          MYSQL_ROOT_PASSWORD: ci-root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pci-root"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_mysql, curl, mbstring, gd, zlib, xml, xmlreader, dom, simplexml, iconv, openssl
+          coverage: none
+          tools: none
+
+      - name: Run test suite
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_USER: root
+          DB_PASS: ci-root
+        run: tests/run.sh

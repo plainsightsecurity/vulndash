@@ -132,6 +132,44 @@ SSH with its own deploy key (`/var/www/.ssh/github_dashboard`, host alias
 `github-dashboard` in `/var/www/.ssh/config`); `main` is protected
 against force-pushes and deletion.
 
+## Tests
+
+`tests/run.sh` runs the whole suite against a disposable MySQL database
+called `vulndash_test`:
+
+- **PHP syntax** - every `.php` file through `php -l`.
+- **Schema and migrations** - `install_schema.sql` loads on a fresh MySQL
+  8.0, and applying every file in `database/migrations/` on top of it
+  succeeds and changes nothing (so the migrations are safe to re-run and
+  `install_schema.sql` already includes them).
+- **Unit and integration tests** (`tests/cases/*Test.php`) - CE+ scoring,
+  tenant isolation, KEV/EPSS/CE+ filters and the PDF, scan-request
+  cooldowns, the missing-KB-QID queue, and live account checks.
+- **Page smoke tests** (`tests/pages.php`) - every page rendered as an
+  admin and as a client with no PHP warnings or errors, admin pages
+  refusing a client, and nothing from another tenant (or an untagged
+  asset) appearing in a client's pages or exports.
+
+It runs automatically on every push to GitHub (`.github/workflows/tests.yml`,
+MySQL 8.0 + PHP 8.3). The tick or cross next to each commit on GitHub is
+the signal: don't run `deploy-dashboard` on a red cross.
+
+Tests never touch `src/config/config.php` or the live database: `run.sh`
+sets `VULNDASH_CONFIG` so `Config` loads `tests/config.test.php` instead,
+which only ever names `vulndash_test` and points Qualys at a closed port.
+To run them on a server, give them a MySQL user limited to that database:
+
+```
+sudo mysql -e "CREATE USER 'vulndash_test'@'127.0.0.1' IDENTIFIED BY 'choose-one';
+               GRANT ALL ON vulndash_test.* TO 'vulndash_test'@'127.0.0.1';"
+DB_USER=vulndash_test DB_PASS=choose-one tests/run.sh
+```
+
+New tests: add a `tests/cases/<Thing>Test.php` calling
+`test('what it checks', function () { ... })` with `eq()` / `ok()`;
+each test starts from an empty database, and `seed_estate()` in
+`tests/lib.php` loads the standard two-tenant sample data.
+
 ## Deploying (first install)
 
 1. **Clone the repo** to `/var/www/dashboard.plainsightsecurity.co.uk/`
