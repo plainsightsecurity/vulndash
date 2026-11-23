@@ -201,7 +201,7 @@ require __DIR__ . '/../src/views/header.php';
         <?php endif; ?>
         <?php if ($intel['epss'] !== null): ?>
         <li>
-            EPSS <?= Helpers::e(rtrim(rtrim(number_format((float)$intel['epss']['epss'] * 100, 2), '0'), '.')) ?>%: the estimated chance of exploitation in the next 30 days. Higher than <?= (int)floor((float)$intel['epss']['percentile'] * 100) ?>% of scored CVEs.
+            EPSS <?= Helpers::e(Helpers::epssPercent((float)$intel['epss']['epss'])) ?>: the estimated chance of exploitation in the next 30 days. Higher than <?= (int)floor((float)$intel['epss']['percentile'] * 100) ?>% of scored CVEs.
         </li>
         <?php endif; ?>
     </ul>

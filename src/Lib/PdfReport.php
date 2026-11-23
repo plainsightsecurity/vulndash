@@ -464,21 +464,16 @@ class PdfReport extends \FPDF
     }
 
     /**
-     * EPSS probability (0..1) as a percentage for the table. Non-zero
-     * scores that would round to 0.0% show as "<0.1%", so "scored, but
-     * very unlikely" isn't confused with "not scored" ("n/a", e.g. a QID
-     * with no CVE or one FIRST hasn't scored yet).
+     * EPSS probability (0..1) for the table, in the same whole-number form
+     * as the web pages (Helpers::epssPercent()). "n/a" is "not scored", e.g.
+     * a QID with no CVE or one FIRST hasn't scored yet.
      */
     private function formatEpss(mixed $epss): string
     {
         if ($epss === null || $epss === '') {
             return 'n/a';
         }
-        $pct = (float)$epss * 100;
-        if ($pct > 0 && $pct < 0.05) {
-            return '<0.1%';
-        }
-        return number_format($pct, 1) . '%';
+        return Helpers::epssPercent((float)$epss);
     }
 
     private function colWidth(string $key): float

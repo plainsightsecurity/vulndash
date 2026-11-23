@@ -140,7 +140,7 @@ require __DIR__ . '/../src/views/header.php';
             </td>
             <td><span class="badge <?= Helpers::severityCssClass($sevLevel) ?>"><?= Helpers::severityLabel($sevLevel) ?></span></td>
             <td class="mono col-num"><?= $fix['max_cvss'] !== null ? number_format($fix['max_cvss'], 1) : 'n/a' ?></td>
-            <td class="mono col-num"><?= $fix['max_epss'] !== null ? number_format($fix['max_epss'] * 100, 1) . '%' : '&mdash;' ?></td>
+            <td class="mono col-num"><?= $fix['max_epss'] !== null ? Helpers::e(Helpers::epssPercent((float)$fix['max_epss'])) : '&mdash;' ?></td>
             <td class="mono col-num" title="<?= number_format($fix['findings']) ?> finding<?= $fix['findings'] === 1 ? '' : 's' ?>"><?= number_format($fix['assets']) ?></td>
             <td class="col-share">
                 <span class="share-bar" aria-hidden="true"><span class="share-bar-fill" style="width: <?= number_format(min(100, $share), 1, '.', '') ?>%"></span></span>

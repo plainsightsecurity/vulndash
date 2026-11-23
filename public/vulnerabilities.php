@@ -363,7 +363,7 @@ if ($newWithinDays !== null) {
             </td>
             <td><span class="badge <?= Helpers::severityCssClass((int)$row['severity_level']) ?>"><?= Helpers::severityLabel((int)$row['severity_level']) ?></span></td>
             <td class="mono"><?= $row['effective_cvss_score'] !== null ? number_format((float)$row['effective_cvss_score'], 1) : 'n/a' ?></td>
-            <td class="mono" title="<?= isset($row['max_epss']) && $row['max_epss'] !== null ? 'EPSS ' . Helpers::e(number_format((float)$row['max_epss'], 5)) . ' — probability of exploitation in the next 30 days' : 'No EPSS score' ?>"><?= isset($row['max_epss']) && $row['max_epss'] !== null ? number_format((float)$row['max_epss'] * 100, 1) . '%' : '—' ?></td>
+            <td class="mono" title="<?= isset($row['max_epss']) && $row['max_epss'] !== null ? 'EPSS ' . Helpers::e(number_format((float)$row['max_epss'], 5)) . ' — probability of exploitation in the next 30 days' : 'No EPSS score' ?>"><?= isset($row['max_epss']) && $row['max_epss'] !== null ? Helpers::e(Helpers::epssPercent((float)$row['max_epss'])) : '—' ?></td>
             <?php // Only CE+ failures carry a deadline; '—' for everything else, and for a CE+ failure with no clock (no vendor patch yet, or no date). ?>
             <td class="mono"><?php if ($ceDeadline === null): ?>—<?php elseif ($ceDeadline['overdue']): ?><span class="badge badge-ce-fail" title="Patch was due <?= Helpers::e($ceDeadline['due']->format('Y-m-d')) ?>"><?= Helpers::e(CePlusDeadline::shortLabel($ceDeadline)) ?></span><?php else: ?><span title="Patch due <?= Helpers::e($ceDeadline['due']->format('Y-m-d')) ?>"><?= Helpers::e(CePlusDeadline::shortLabel($ceDeadline)) ?></span><?php endif; ?></td>
             <td><?= Helpers::e($row['status']) ?></td>

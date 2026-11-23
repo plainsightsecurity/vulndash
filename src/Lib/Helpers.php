@@ -685,4 +685,22 @@ class Helpers
 
         return (int)(ceil($max / $niceStep) * $niceStep);
     }
+
+    /**
+     * EPSS probability (0..1) as a whole-number percentage for display.
+     * Rounds to nearest rather than up: most scores are a fraction of a
+     * percent, and ceil() would show them all as 1%, overstating them and
+     * flattening the differences between them. Anything under 1% shows as
+     * "<1%" so "scored, but very unlikely" still reads differently from the
+     * caller's own "not scored" marker. Display only - risk scoring and
+     * filters use the raw value. Returns plain text; escape it for HTML.
+     */
+    public static function epssPercent(float $epss): string
+    {
+        $pct = $epss * 100;
+        if ($pct < 1) {
+            return '<1%';
+        }
+        return (int)min(100, round($pct)) . '%';
+    }
 }
