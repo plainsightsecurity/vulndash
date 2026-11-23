@@ -38,6 +38,7 @@ $cases = [
     ['admin',  'password.php',           '',                  'html',  [], []],
     ['admin',  'admin/users.php',        '',                  'html',  ['client'], []],
     ['admin',  'admin/api_usage.php',    '',                  'html',  [], []],
+    ['admin',  'guide.php',              '',                  'html',  ['id="admin-users"', 'id="admin-audit"', 'id="admin-api"', 'Custom remediation', 'Uninstalling the agent', 'href="/guide"'], []],
     ['client', 'dashboard.php',          '',                  'html',  [], OTHER_TENANTS],
     ['client', 'assets.php',             '',                  'html',  ['host-a', 'aria-current="page">Assets</a>'], array_merge(OTHER_TENANTS, ['href="/admin/users"', 'href="/admin/api_usage"'])],
     ['client', 'vulnerabilities.php',    '',                  'html',  ['host-a'], OTHER_TENANTS],
@@ -53,6 +54,9 @@ $cases = [
     ['client', 'search.php',             'q=host',            'html',  [], OTHER_TENANTS],
     ['client', 'ce_readiness.php',       '',                  'html',  [], OTHER_TENANTS],
     ['client', 'preferences.php',        '',                  'html',  ['Exploited-vulnerability alerts'], []],
+    // Client with no uninstall grant and no activation ID on its tag: the guide
+    // must leave out every admin section and both agent sections.
+    ['client', 'guide.php',              '',                  'html',  ['id="dashboard"', 'Scanning on demand', 'aria-current="page">User guide</a>'], array_merge(OTHER_TENANTS, ['id="admin-', 'href="#admin-', 'guide-admin-note', 'href="/admin/users"', '>Manage Users<', 'Uninstall', 'Install agent', 'Custom remediation', 'sync status'])],
     ['client', 'admin/users.php',        '',                  '403',   [], []],
     ['client', 'admin/api_usage.php',    '',                  '403',   [], []],
 ];

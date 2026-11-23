@@ -2842,3 +2842,94 @@ a.movement-card .movement-card-hint {
     border-radius: var(--radius);
 }
 .activation-id-form input:focus { outline: none; border-color: var(--signal); }
+
+/* ===========================================================================
+   User guide (public/guide.php)
+   =========================================================================== */
+
+/* Contents list in a sticky left column on wide screens; above the text on
+   narrow ones, where a sidebar would squeeze the example tables. */
+.guide-layout {
+    display: grid;
+    grid-template-columns: 13rem minmax(0, 1fr);
+    gap: 2rem;
+    align-items: start;
+}
+.guide-toc {
+    position: sticky;
+    top: 1rem;
+    background: var(--panel);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+    padding: 0.9rem 1rem;
+    font-size: 0.88rem;
+}
+.guide-toc-heading {
+    display: block;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.5rem;
+}
+.guide-toc ol { margin: 0; padding-left: 1.2rem; }
+.guide-toc li { margin-bottom: 0.3rem; }
+.guide-admin-badge { font-size: 0.65rem; vertical-align: middle; }
+
+.guide-section {
+    padding-bottom: 1.5rem;
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid var(--hairline);
+    line-height: 1.6;
+    /* Keeps a heading clear of the top edge when jumped to from the contents. */
+    scroll-margin-top: 1rem;
+}
+.guide-section:last-child { border-bottom: 0; }
+.guide-section > h2 { font-size: 1.3rem; margin: 0 0 0.75rem; }
+.guide-section h3 { font-size: 1rem; margin: 1.25rem 0 0.4rem; }
+.guide-section ul { padding-left: 1.3rem; }
+.guide-section li { margin-bottom: 0.35rem; }
+
+/* Example mock-ups: real page classes inside a dashed frame, labelled so no
+   one mistakes the made-up figures for their own. Marked inert in the markup,
+   so nothing inside can be clicked or focused. */
+.guide-example {
+    position: relative;
+    border: 1px dashed var(--hairline);
+    border-radius: var(--radius);
+    padding: 1.6rem 1rem 0.5rem;
+    margin: 1rem 0 1.25rem;
+    line-height: normal;
+}
+.guide-example-label {
+    position: absolute;
+    top: 0.45rem;
+    left: 0.75rem;
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+.guide-example .stat-card { animation: none; }
+.guide-example .dashboard-posture { margin-top: 0.5rem; }
+.guide-example .search-verdict { margin-bottom: 0.6rem; }
+.guide-example .hidden-chip { margin-right: 0.5rem; }
+.guide-badge-row { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+
+.guide-admin-note {
+    background: var(--signal-dim);
+    border-left: 3px solid var(--signal);
+    border-radius: var(--radius);
+    padding: 0.7rem 0.9rem;
+    margin: 1rem 0;
+    font-size: 0.92rem;
+}
+.guide-admin-note .badge { margin-right: 0.4rem; }
+
+.guide-glossary dt { font-weight: 600; margin-top: 0.75rem; }
+.guide-glossary dd { margin: 0.15rem 0 0; color: var(--text-muted); }
+
+@media (max-width: 860px) {
+    .guide-layout { grid-template-columns: 1fr; }
+    .guide-toc { position: static; }
+}
