@@ -42,7 +42,7 @@ test('PDF builds with KEV and EPSS columns', function () {
     );
     $out = $pdf->Output('S');
     ok(str_starts_with($out, '%PDF'), 'output is a PDF');
-    foreach (['(EPSS)', '(KEV)', '(97.0%)', '(12.0%)', '(<0.1%)', '(n/a)', '(host-untagged)'] as $needle) {
+    foreach (['(EPSS)', '(KEV)', '(97%)', '(12%)', '(<1%)', '(n/a)', '(host-untagged)'] as $needle) {
         ok(str_contains($out, $needle), "PDF contains $needle");
     }
 });
