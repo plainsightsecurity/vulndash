@@ -83,22 +83,73 @@ Config, source, scripts, and SQL all live outside it deliberately, and the
 provided vhost config denies them explicitly as a second layer of
 protection in case `DocumentRoot` is ever pointed at the wrong place.
 
-## Deploying
+## Updating the live server
 
-1. **Copy the files.** Place the whole `dashboard.plainsightsecurity.co.uk/`
-   folder at `/var/www/dashboard.plainsightsecurity.co.uk/` (or adjust the
-   paths in `config/apache-vhost.conf` if you use a different location).
+The code lives in the private GitHub repo `plainsightsecurity/vulndash`, and
+the live install at `/var/www/dashboard.plainsightsecurity.co.uk` is a git
+working copy of `main`, owned by `www-data`. Changes are committed straight
+to `main` (no pull requests); nothing reaches production until it is pulled
+on the server.
+
+**Pulling changes onto the server:**
+
+```
+deploy-dashboard
+```
+
+`/usr/local/bin/deploy-dashboard` runs `git pull --ff-only` as `www-data`,
+prints the new commit and the files changed, and lists any newly added
+files under `database/migrations/` - those still have to be run by hand
+(`sudo mysql vulndash < database/migrations/<file>.sql`). Crontab and
+`src/config/config.php` changes are manual too; the commit message says
+when one is needed.
+
+**Committing an edit made on the server:**
+
+```
+save-dashboard "What changed"
+```
+
+`/usr/local/bin/save-dashboard` commits everything outstanding, rebases on
+anything pushed since (`git pull --rebase`) and pushes. Run it straight
+after any server-side edit: an uncommitted edit, or a local commit that
+hasn't been pushed, makes the next `deploy-dashboard` refuse to pull.
+
+**Rolling back** to the previous version if a deploy misbehaves:
+
+```
+sudo -u www-data git -C /var/www/dashboard.plainsightsecurity.co.uk log --oneline -5
+sudo -u www-data git -C /var/www/dashboard.plainsightsecurity.co.uk reset --hard <commit>
+```
+
+Then revert the bad commit in the repo, or the next `deploy-dashboard`
+will pull it straight back in.
+
+**Never in git:** `src/config/config.php` (credentials - see
+`src/config/config.example.php` for every setting) and anything matched
+by `.gitignore` (logs, zips, backups). The server pulls and pushes over
+SSH with its own deploy key (`/var/www/.ssh/github_dashboard`, host alias
+`github-dashboard` in `/var/www/.ssh/config`); `main` is protected
+against force-pushes and deletion.
+
+## Deploying (first install)
+
+1. **Clone the repo** to `/var/www/dashboard.plainsightsecurity.co.uk/`
+   (or adjust the paths in `config/apache-vhost.conf` if you use a
+   different location). The deploy key and SSH alias described above
+   have to exist first.
 
    ```
-   sudo cp -r dashboard.plainsightsecurity.co.uk /var/www/
-   sudo chown -R www-data:www-data /var/www/dashboard.plainsightsecurity.co.uk
+   sudo mkdir /var/www/dashboard.plainsightsecurity.co.uk
+   sudo chown www-data:www-data /var/www/dashboard.plainsightsecurity.co.uk
+   sudo -u www-data git clone git@github-dashboard:plainsightsecurity/vulndash.git /var/www/dashboard.plainsightsecurity.co.uk
    ```
 
 2. **Install packages** (Ubuntu):
 
    ```
    sudo apt update
-   sudo apt install apache2 mariadb-server php php-mysql
+   sudo apt install apache2 mysql-server php php-mysql php-curl
    sudo a2enmod ssl headers rewrite
    ```
 
@@ -108,8 +159,12 @@ protection in case `DocumentRoot` is ever pointed at the wrong place.
    sudo mysql -u root -e "CREATE DATABASE vulndash CHARACTER SET utf8mb4;"
    sudo mysql -u root -e "CREATE USER 'vulndash_app'@'127.0.0.1' IDENTIFIED BY 'choose-a-strong-password';"
    sudo mysql -u root -e "GRANT ALL PRIVILEGES ON vulndash.* TO 'vulndash_app'@'127.0.0.1'; FLUSH PRIVILEGES;"
-   mysql -u root vulndash < database/schema.sql
+   mysql -u root vulndash < install_schema.sql
    ```
+
+   `install_schema.sql` is the authoritative schema (a `mysqldump
+   --no-data` of production); `database/schema.sql` is older and has
+   drifted, so don't use it for a new install.
 
    Optionally load sample data so you can see the interface working before
    Qualys access exists (see "Test accounts" below):
@@ -118,18 +173,20 @@ protection in case `DocumentRoot` is ever pointed at the wrong place.
    mysql -u root vulndash < database/seed_sample_data.sql
    ```
 
-   **Already deployed this before?** Don't re-run `schema.sql` against a
-   database you care about - it won't touch existing tables/data, but any
-   schema fixes since your last deploy live in `database/migrations/`
-   instead. Run any you haven't yet, in filename order:
+   `install_schema.sql` already includes every migration in
+   `database/migrations/`, so a new install doesn't need to run them.
+   Those files are for an existing database: `deploy-dashboard` lists
+   any new ones after a pull (see "Updating the live server" above).
+
+4. **Create `src/config/config.php`** from the example, then fill in the
+   database password, Qualys credentials and Resend key:
 
    ```
-   mysql -u root vulndash < database/migrations/2026-07-widen-qualys-tag-id.sql
-   mysql -u root vulndash < database/migrations/2026-07-add-mfa.sql
+   sudo -u www-data cp src/config/config.example.php src/config/config.php
+   sudo chmod 640 src/config/config.php
    ```
 
-4. **Edit `src/config/config.php`** with the real database password (and
-   later, Qualys credentials once you have them). Also generate a key for
+   Also generate a key for
    `security.mfa_encryption_key` (used to encrypt TOTP secrets at rest -
    see "Two-factor authentication (MFA)" below) with:
 
