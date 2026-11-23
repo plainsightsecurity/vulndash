@@ -5,6 +5,19 @@ declare(strict_types=1);
 // line). Called by tests/run.sh, which sets VULNDASH_CONFIG and builds the
 // vulndash_test database first.
 
+// A real (cookie-less) session, started before any output, so code under
+// test that rotates the session id (Auth's sign-in) works as in a request.
+ini_set('session.use_cookies', '0');
+ini_set('session.use_only_cookies', '0');
+ini_set('session.cache_limiter', '');
+ini_set('session.save_path', sys_get_temp_dir());
+session_id('vdtest' . bin2hex(random_bytes(8)));
+session_start();
+// Buffer this script's own output: in the CLI, headers count as sent after
+// the first byte printed, which would stop that session id rotation working.
+// The buffer is printed when the script ends.
+ob_start();
+
 require __DIR__ . '/lib.php';
 
 $files = array_slice($argv, 1) ?: glob(__DIR__ . '/cases/*Test.php');

@@ -2719,3 +2719,37 @@ a.movement-card .movement-card-hint {
     margin: 0 0 1rem;
 }
 .search-help { max-width: 760px; }
+
+/* --------------------------------------------------------------------------
+   Audit Log (public/admin/audit_log.php)
+   -------------------------------------------------------------------------- */
+.audit-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem 1.2rem;
+    margin: 0 0 0.8rem;
+    font-size: 0.88rem;
+}
+.audit-count { font-weight: 600; }
+.audit-quick { color: var(--text-muted); }
+.audit-toolbar .btn { margin-left: auto; padding: 0.35rem 0.8rem; font-size: 0.82rem; }
+.audit-table td { vertical-align: top; font-size: 0.85rem; }
+.audit-table .nowrap { white-space: nowrap; }
+.audit-code {
+    display: block;
+    margin-top: 0.1rem;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+.audit-details {
+    max-width: 26rem;
+    color: var(--text-muted);
+    word-break: break-word;
+}
+.audit-table tr.audit-failure td:first-child { box-shadow: inset 3px 0 0 var(--sev-high); }
+.pagination-status {
+    padding: 0.35rem 0.6rem;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}

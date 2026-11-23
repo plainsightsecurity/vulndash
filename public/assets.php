@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../src/bootstrap.php';
 
+use VulnDash\Lib\AuditLog;
 use VulnDash\Lib\AgentUninstallRepository;
 use VulnDash\Lib\Auth;
 use VulnDash\Lib\Helpers;
@@ -58,6 +59,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'unins
     }
 
     $r = AgentUninstallRepository::enqueue($assetIds, Auth::userId(), $tagIds, $isAdmin);
+    if ($r['queued'] > 0) {
+        AuditLog::record('agent.uninstall_requested', [
+            'target_type' => 'assets', 'target_label' => implode(', ', array_slice($r['hostnames'], 0, 10)) . (count($r['hostnames']) > 10 ? ', ...' : ''),
+            'details' => ['queued' => $r['queued'], 'hosts' => $r['hostnames']],
+        ]);
+    }
 
     $parts = [];
     if ($r['queued'] > 0) {
@@ -103,6 +110,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'reque
     }
 
     $r = ScanRequestRepository::enqueue($assetIds, Auth::userId(), $tagIds, $isAdmin);
+    if ($r['queued'] > 0) {
+        AuditLog::record('scan.requested', [
+            'target_type' => 'assets', 'target_label' => implode(', ', array_slice($r['hostnames'], 0, 10)) . (count($r['hostnames']) > 10 ? ', ...' : ''),
+            'details' => ['queued' => $r['queued'], 'hosts' => $r['hostnames']],
+        ]);
+    }
 
     $parts = [];
     if ($r['queued'] > 0) {

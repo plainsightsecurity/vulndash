@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../src/bootstrap.php';
 
+use VulnDash\Lib\AuditLog;
 use VulnDash\Lib\Auth;
 use VulnDash\Lib\Helpers;
 use VulnDash\Lib\KevAlertRepository;
@@ -40,6 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         UserRepository::setNotifyFrequency($userId, $freq);
+        AuditLog::record('account.notifications_changed', ['details' => ['activity_emails' => $freq]]);
 
         $msg = $freq === 'off'
             ? 'Email notifications are now off.'
@@ -52,6 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'kev_alerts') {
         $enabled = !empty($_POST['kev_alerts']);
         KevAlertRepository::setEnabled($userId, $enabled);
+        AuditLog::record('account.notifications_changed', ['details' => ['kev_alerts' => $enabled ? 'on' : 'off']]);
         Helpers::setFlash($enabled
             ? 'Exploited-vulnerability alerts are on. You\'ll get an email when a vulnerability on the CISA KEV list newly appears in your systems.'
             : 'Exploited-vulnerability alerts are off.');

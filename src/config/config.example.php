@@ -105,6 +105,10 @@ return [
         'host_detections_expected_interval_minutes' => 30,   // default 180
     ],
 
+    'audit' => [
+        'retention_days' => 365,              // Audit Log rows older than this are pruned
+    ],
+
     'assets' => [
         'stale_after_days' => 7,              // "not reporting" threshold for agents
     ],

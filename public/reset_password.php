@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../src/bootstrap.php';
 
+use VulnDash\Lib\AuditLog;
 use VulnDash\Lib\Config;
 use VulnDash\Lib\Helpers;
 use VulnDash\Lib\PasswordResetRepository;
@@ -48,6 +49,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $tokenInfo !== null) {
             // assumed safe to keep honouring. Harmless no-op for a brand
             // new account, which has none yet.
             TrustedDeviceRepository::revokeAllForUser($tokenInfo['user_id']);
+            AuditLog::record('account.password_reset', [
+                'user_id'  => (int)$tokenInfo['user_id'],
+                'username' => UserRepository::getUser((int)$tokenInfo['user_id'])['username'] ?? null,
+                'details'  => ['purpose' => $tokenInfo['purpose'] ?? 'reset'],
+            ]);
 
             $done = true;
         }

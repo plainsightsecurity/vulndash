@@ -471,6 +471,17 @@ there is no backlog email. Needs
 
 `--dry-run` shows who would be emailed without sending or recording anything.
 
+**Audit log.** Admin menu > Audit Log (`/admin/audit_log`) lists who did
+what: sign-ins (and failures, lockouts, rejected two-factor codes), account
+security changes, every admin action on users and tags, hidden findings,
+scan and agent-uninstall requests, custom remediation edits, CE+
+assessment dates and report exports - with the user, target, details and IP
+address. Filter by user, activity, date or text; download as CSV. Written by
+`src/Lib/AuditLog.php` (best-effort: a failed audit write never blocks the
+action), needs `database/migrations/2026-11-add-audit-log.sql`, and prunes
+itself after `audit.retention_days` (default 365) - no cron job. Actions by
+CLI scripts and cron jobs aren't recorded.
+
 **New-QID fast-path.** Each steady-state KB run (after the historical backfill
 completes) makes one extra id-range call - `id_min = (highest local QID) + 1` -
 to pick up brand-new QIDs immediately, without waiting for Qualys to index

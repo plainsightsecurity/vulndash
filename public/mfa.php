@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../src/bootstrap.php';
 
+use VulnDash\Lib\AuditLog;
 use VulnDash\Lib\Auth;
 use VulnDash\Lib\Config;
 use VulnDash\Lib\Helpers;
@@ -36,6 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!MfaService::confirmEnrollment($userId, $code)) {
                     throw new \RuntimeException('Incorrect code - check the time on your phone and try again.');
                 }
+                AuditLog::record('account.mfa_enabled');
                 Helpers::setFlash('Two-factor authentication is now enabled on your account.');
                 break;
 
@@ -50,12 +52,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 MfaService::disable($userId);
                 TrustedDeviceRepository::clearCookie();
+                AuditLog::record('account.mfa_disabled');
                 Helpers::setFlash('Two-factor authentication has been disabled.');
                 break;
 
             case 'revoke_device':
                 $deviceId = (int)($_POST['device_id'] ?? 0);
                 if (TrustedDeviceRepository::revoke($deviceId, $userId, $userId)) {
+                    AuditLog::record('account.trusted_device_revoked', ['details' => ['device_id' => $deviceId]]);
                     Helpers::setFlash('Device trust revoked.');
                 } else {
                     throw new \RuntimeException('That device was not found - it may already be revoked.');
@@ -65,6 +69,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             case 'revoke_all_devices':
                 TrustedDeviceRepository::revokeAllForUser($userId, $userId);
                 TrustedDeviceRepository::clearCookie();
+                AuditLog::record('account.trusted_devices_revoked');
                 Helpers::setFlash('All trusted devices have been revoked. You will be asked for a code on every device next time, including this one.');
                 break;
 

@@ -2,11 +2,13 @@
 declare(strict_types=1);
 
 // Renders one public page in-process, the way Apache would, for
-// tests/pages.php. Usage: php tests/render_page.php <page.php> <query> <role>
+// tests/pages.php. Usage: php tests/render_page.php <page.php> <query> <role> [post-body]
+// With a post-body (URL-encoded, csrf_token added automatically) the request
+// is a POST, for tests that drive a form handler.
 // role: admin | client | anon. Any PHP warning/notice/deprecation is printed
 // as a "PHPERR:" line so the caller can fail on it.
 
-[$_, $page, $query, $role] = $argv + [null, '', '', 'anon'];
+[$_, $page, $query, $role, $postBody] = $argv + [null, '', '', 'anon', null];
 
 error_reporting(E_ALL);
 ini_set('display_errors', '0');
@@ -23,7 +25,11 @@ register_shutdown_function(static function (): void {
     }
 });
 
-$_SERVER['REQUEST_METHOD'] = 'GET';
+$_SERVER['REQUEST_METHOD'] = $postBody !== null ? 'POST' : 'GET';
+if ($postBody !== null) {
+    parse_str($postBody, $_POST);
+    $_POST['csrf_token'] = str_repeat('a', 64);
+}
 $_SERVER['REQUEST_URI'] = '/' . preg_replace('/\.php$/', '', $page) . ($query !== '' ? "?$query" : '');
 $_SERVER['HTTP_HOST'] = 'dashboard.test';
 $_SERVER['REMOTE_ADDR'] = '127.0.0.1';

@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../src/bootstrap.php';
 
+use VulnDash\Lib\AuditLog;
 use VulnDash\Lib\Config;
 use VulnDash\Lib\Helpers;
 use VulnDash\Lib\Mailer;
@@ -37,6 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $baseUrl = rtrim((string)(Config::get('app.base_url') ?? ''), '/');
                 $link = $baseUrl . '/reset_password?token=' . urlencode($token);
                 Mailer::sendPasswordResetEmail($user['email'], $user['username'], $link);
+                AuditLog::record('account.password_reset_requested', ['user_id' => (int)$user['id'], 'username' => $user['username']]);
             }
             $submitted = true;
         }

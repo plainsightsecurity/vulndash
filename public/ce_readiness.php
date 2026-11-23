@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../src/bootstrap.php';
 
+use VulnDash\Lib\AuditLog;
 use VulnDash\Lib\Auth;
 use VulnDash\Lib\CePlusDeadline;
 use VulnDash\Lib\CePlusReadiness;
@@ -70,6 +71,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         Helpers::setFlash('That is not a valid date.', 'error');
     } else {
         UserRepository::setCeAssessmentDate($postTagId, $date);
+        AuditLog::record('admin.ce_assessment_date', [
+            'target_type' => 'tag', 'target_id' => $postTagId, 'target_label' => $tagName,
+            'details' => ['date' => $date],
+        ]);
         Helpers::setFlash($date === null
             ? "Assessment date cleared for {$tagName}."
             : "Assessment date for {$tagName} set to " . (new \DateTimeImmutable($date))->format('j M Y') . '.');

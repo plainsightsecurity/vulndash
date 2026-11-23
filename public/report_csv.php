@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../src/bootstrap.php';
 
+use VulnDash\Lib\AuditLog;
 use VulnDash\Lib\Auth;
 use VulnDash\Lib\CePlusDeadline;
 use VulnDash\Lib\Helpers;
@@ -37,6 +38,16 @@ $filters    = ['severity' => $severity, 'ce_plus_only' => $cePlusOnly, 'kev_only
 // output via fputcsv() is cheap enough that there's no real reason to cap
 // it the way the PDF's laid-out table has to be.
 $rows = VulnerabilityRepository::getDetectionsForExport($tagIds, $isAdmin, $filters, $viewTagId, null, $userId);
+
+AuditLog::record('report.exported', [
+    'target_type'  => 'report',
+    'target_label' => 'CSV - ' . Helpers::scopeLabel($availableTags, $viewTagId, $isAdmin),
+    'details'      => ['format' => 'csv', 'rows' => count($rows), 'filters' => implode(', ', array_filter([
+        Helpers::describeReportFilters($severity, $cePlusOnly),
+        $kevOnly ? 'Known exploited (CISA KEV) only' : '',
+        $minEpss !== null ? 'EPSS >= ' . rtrim(rtrim(number_format($minEpss * 100, 1), '0'), '.') . '%' : '',
+    ])) ?: 'none'],
+]);
 
 // Excel's hard limit is 32,767 characters per cell; a longer value doesn't
 // fail cleanly, it spills the remainder into the following rows and wrecks

@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../src/bootstrap.php';
 
+use VulnDash\Lib\AuditLog;
 use VulnDash\Lib\Auth;
 use VulnDash\Lib\Helpers;
 use VulnDash\Lib\UserRepository;
@@ -34,6 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         UserRepository::resetPassword($userId, $new);
+        AuditLog::record('account.password_changed');
 
         // resetPassword() bumped this account's session_epoch, which will sign
         // out every OTHER open session for it on their next request (see

@@ -56,6 +56,7 @@ class Auth
         // per-account attempts underneath. See LoginThrottleRepository.
         $ip = LoginThrottleRepository::clientIp();
         if (LoginThrottleRepository::isThrottled($ip)) {
+            self::auditFailure(null, $username, 'throttled');
             return self::RESULT_THROTTLED;
         }
 
@@ -86,17 +87,20 @@ class Auth
             // aiming at usernames that don't exist.
             password_verify($password, self::DUMMY_PASSWORD_HASH);
             LoginThrottleRepository::recordFailure($ip);
+            self::auditFailure($user ?: null, $username, $user ? 'account deactivated' : 'no such account');
             return self::RESULT_FAILED;
         }
 
         if ($user['locked_until'] !== null && strtotime($user['locked_until']) > time()) {
             LoginThrottleRepository::recordFailure($ip);
+            self::auditFailure($user, $username, 'account locked');
             return self::RESULT_FAILED;
         }
 
         if (!password_verify($password, $user['password_hash'])) {
             self::registerFailedAttempt($pdo, (int)$user['id'], (int)$user['failed_login_attempts']);
             LoginThrottleRepository::recordFailure($ip);
+            self::auditFailure($user, $username, 'wrong password');
             return self::RESULT_FAILED;
         }
 
@@ -120,7 +124,31 @@ class Auth
         }
 
         self::finalizeLogin($pdo, $user);
+        AuditLog::record('auth.login', [
+            'details' => ['method' => (int)$user['mfa_enabled'] === 1 ? 'password + trusted device' : 'password'],
+        ]);
         return self::RESULT_SUCCESS;
+    }
+
+    /**
+     * Audit a failed password sign-in. Against a real account the row is
+     * attributed to it (so an admin filtering by user sees attacks on that
+     * account); otherwise the name that was typed is kept as the target only,
+     * trimmed - it's occasionally a mistyped password.
+     */
+    private static function auditFailure(?array $user, string $typed, string $reason): void
+    {
+        AuditLog::record('auth.login_failed', $user !== null ? [
+            'user_id'  => (int)$user['id'],
+            'username' => (string)$user['username'],
+            'details'  => ['reason' => $reason],
+        ] : [
+            'user_id'      => null,
+            'username'     => null,
+            'target_type'  => 'login',
+            'target_label' => mb_substr($typed, 0, 64),
+            'details'      => ['reason' => $reason],
+        ]);
     }
 
     /** @return int|null the user ID awaiting MFA verification, or null if no challenge is pending (or it expired). */
@@ -161,6 +189,11 @@ class Auth
 
         $result = MfaService::verifyLoginCode($userId, $code);
         if ($result !== MfaService::VERIFY_OK) {
+            AuditLog::record('auth.mfa_failed', [
+                'user_id'  => $userId,
+                'username' => UserRepository::getUser($userId)['username'] ?? null,
+                'details'  => ['result' => $result],
+            ]);
             return $result;
         }
 
@@ -178,6 +211,9 @@ class Auth
         if ($trustDevice) {
             TrustedDeviceRepository::issue($userId);
         }
+        AuditLog::record('auth.login', [
+            'details' => ['method' => 'password + two-factor code' . ($trustDevice ? ' (device now trusted)' : '')],
+        ]);
 
         return MfaService::VERIFY_OK;
     }
@@ -252,6 +288,13 @@ class Auth
 
         $pdo->prepare('UPDATE users SET failed_login_attempts = :attempts, locked_until = :locked WHERE id = :id')
             ->execute(['attempts' => $attempts, 'locked' => $lockedUntil, 'id' => $userId]);
+        if ($lockedUntil !== null) {
+            AuditLog::record('auth.account_locked', [
+                'user_id'  => $userId,
+                'username' => UserRepository::getUser($userId)['username'] ?? null,
+                'details'  => ['locked_until' => $lockedUntil, 'failed_attempts' => $attempts],
+            ]);
+        }
     }
 
     /** @return int[] */
@@ -337,6 +380,9 @@ class Auth
 
     public static function logout(): void
     {
+        if (!empty($_SESSION['user_id'])) {
+            AuditLog::record('auth.logout');
+        }
         $_SESSION = [];
         if (ini_get('session.use_cookies')) {
             $params = session_get_cookie_params();

@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../src/bootstrap.php';
 
+use VulnDash\Lib\AuditLog;
 use VulnDash\Lib\Auth;
 use VulnDash\Lib\Helpers;
 use VulnDash\Lib\PdfReport;
@@ -84,6 +85,12 @@ $meta = [
     'generatedAt'  => (new DateTimeImmutable('now', new DateTimeZone('Europe/London')))->format('Y-m-d H:i T'),
     'generatedBy'  => Auth::username(),
 ];
+
+AuditLog::record('report.exported', [
+    'target_type'  => 'report',
+    'target_label' => 'PDF - ' . $meta['scope'],
+    'details'      => ['format' => 'pdf', 'rows' => count($detections), 'filters' => $meta['filters'] !== '' ? $meta['filters'] : 'none'],
+]);
 
 $pdf = new PdfReport();
 $pdf->buildReport($meta, $severityCounts, $totalCount, $detections, $truncated, REPORT_PDF_MAX_ROWS, $cePlusOverdueCount, $staleAssetCount);

@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../src/bootstrap.php';
 
+use VulnDash\Lib\AuditLog;
 use VulnDash\Lib\Auth;
 use VulnDash\Lib\Config;
 use VulnDash\Lib\Helpers;
@@ -43,6 +44,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $action = (string)($_POST['action'] ?? '');
 
+    // For the audit log: tag ids -> names, and the account being acted on
+    // (looked up before the change, so a deleted account keeps its name).
+    $tagNamesFor = static function (array $ids): array {
+        $byId = array_column(UserRepository::listTags(), 'name', 'id');
+        $names = array_map(static fn ($id) => (string)($byId[(int)$id] ?? "#{$id}"), $ids);
+        sort($names);
+        return $names;
+    };
+    $auditTarget = static function (int $userId): array {
+        $u = UserRepository::getUser($userId);
+        return ['target_type' => 'user', 'target_id' => $userId, 'target_label' => $u['username'] ?? "#{$userId}"];
+    };
+
     try {
         switch ($action) {
             case 'create_user':
@@ -60,6 +74,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
 
                 $userId = UserRepository::createUser($username, $email, $isAdmin, $tagIds, $canUninstall);
+                AuditLog::record('admin.user_created', $auditTarget($userId) + ['details' => [
+                    'email' => $email, 'admin' => $isAdmin, 'can_uninstall' => $canUninstall, 'tags' => $tagNamesFor($tagIds),
+                ]]);
 
                 if (sendPasswordLink($userId, $email, $username, PasswordResetRepository::PURPOSE_SETUP)) {
                     Helpers::setFlash("Account '{$username}' created - an email with a link to set a password has been sent to {$email}.");
@@ -80,7 +97,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($user && !$user['is_admin'] && empty($tagIds)) {
                     throw new \RuntimeException('This account has no admin flag, so it needs at least one tag or it will see no data.');
                 }
+                $tagsBefore = $tagNamesFor(UserRepository::getUserTagIds($userId));
                 UserRepository::updateUserTags($userId, $tagIds);
+                AuditLog::record('admin.user_tags_changed', $auditTarget($userId) + ['details' => [
+                    'before' => $tagsBefore, 'after' => $tagNamesFor($tagIds),
+                ]]);
                 Helpers::setFlash('Tag assignments updated.');
                 break;
 
@@ -92,6 +113,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $user = UserRepository::getUser($userId);
                 if ($user) {
                     UserRepository::setAdmin($userId, !$user['is_admin']);
+                    AuditLog::record('admin.user_admin_changed', $auditTarget($userId) + ['details' => ['admin' => !$user['is_admin']]]);
                     Helpers::setFlash('Admin status updated.');
                 }
                 break;
@@ -106,7 +128,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $userId = (int)($_POST['user_id'] ?? 0);
                 $user = UserRepository::getUser($userId);
                 if ($user) {
-                    UserRepository::setCanUninstall($userId, !UserRepository::getCanUninstall($userId));
+                    $canNow = !UserRepository::getCanUninstall($userId);
+                    UserRepository::setCanUninstall($userId, $canNow);
+                    AuditLog::record('admin.user_uninstall_changed', $auditTarget($userId) + ['details' => ['can_uninstall' => $canNow]]);
                     Helpers::setFlash('Agent-uninstall permission updated.');
                 }
                 break;
@@ -119,6 +143,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $user = UserRepository::getUser($userId);
                 if ($user) {
                     UserRepository::setActive($userId, !$user['is_active']);
+                    AuditLog::record('admin.user_active_changed', $auditTarget($userId) + ['details' => ['active' => !$user['is_active']]]);
                     Helpers::setFlash('Account status updated.');
                 }
                 break;
@@ -130,6 +155,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     throw new \RuntimeException('Password must be at least 12 characters.');
                 }
                 UserRepository::resetPassword($userId, $password);
+                AuditLog::record('admin.user_password_set', $auditTarget($userId));
                 Helpers::setFlash('Password reset.');
                 break;
 
@@ -140,6 +166,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     throw new \RuntimeException('That account no longer exists.');
                 }
                 if (sendPasswordLink($userId, $user['email'], $user['username'], PasswordResetRepository::PURPOSE_RESET)) {
+                    AuditLog::record('admin.password_reset_sent', $auditTarget($userId) + ['details' => ['email' => $user['email']]]);
                     Helpers::setFlash("Password reset email sent to {$user['email']}.");
                 } else {
                     Helpers::setFlash(
@@ -154,13 +181,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($userId === $currentUserId) {
                     throw new \RuntimeException("You can't delete your own account.");
                 }
+                $target = $auditTarget($userId);
                 UserRepository::deleteUser($userId);
+                AuditLog::record('admin.user_deleted', $target);
                 Helpers::setFlash('Account deleted.');
                 break;
 
             case 'reset_mfa':
                 $userId = (int)($_POST['user_id'] ?? 0);
                 MfaService::disable($userId);
+                AuditLog::record('admin.mfa_reset', $auditTarget($userId));
                 Helpers::setFlash('Two-factor authentication has been reset for this account - they will need to set it up again. Any trusted devices were revoked at the same time.');
                 break;
 
@@ -168,6 +198,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $userId = (int)($_POST['user_id'] ?? 0);
                 $deviceId = (int)($_POST['device_id'] ?? 0);
                 if (TrustedDeviceRepository::revoke($deviceId, $userId, $currentUserId)) {
+                    AuditLog::record('admin.trusted_device_revoked', $auditTarget($userId) + ['details' => ['device_id' => $deviceId]]);
                     Helpers::setFlash('Device trust revoked.');
                 } else {
                     throw new \RuntimeException('That device was not found - it may already be revoked.');
@@ -177,6 +208,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             case 'revoke_all_trusted_devices':
                 $userId = (int)($_POST['user_id'] ?? 0);
                 TrustedDeviceRepository::revokeAllForUser($userId, $currentUserId);
+                AuditLog::record('admin.trusted_devices_revoked', $auditTarget($userId));
                 Helpers::setFlash('All trusted devices revoked for this account.');
                 break;
 
@@ -193,7 +225,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // now, its Qualys ID filled in automatically the first time an
                 // agent carrying a tag of this name reports (see
                 // UserRepository::resolveSyncedTagId()).
-                UserRepository::createTag($qualysTagId !== '' ? $qualysTagId : null, $name);
+                $newTagId = UserRepository::createTag($qualysTagId !== '' ? $qualysTagId : null, $name);
+                AuditLog::record('admin.tag_created', [
+                    'target_type' => 'tag', 'target_id' => $newTagId, 'target_label' => $name,
+                    'details' => ['qualys_tag_id' => $qualysTagId !== '' ? $qualysTagId : 'pending'],
+                ]);
                 Helpers::setFlash(
                     $qualysTagId !== ''
                         ? "Tag '{$name}' created."
@@ -205,7 +241,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             case 'delete_tag':
                 $tagId = (int)($_POST['tag_id'] ?? 0);
+                $tagName = $tagNamesFor([$tagId])[0];
                 UserRepository::deleteTag($tagId);
+                AuditLog::record('admin.tag_deleted', ['target_type' => 'tag', 'target_id' => $tagId, 'target_label' => $tagName]);
                 Helpers::setFlash('Tag deleted.');
                 break;
 

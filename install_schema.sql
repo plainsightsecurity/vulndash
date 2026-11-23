@@ -80,6 +80,26 @@ CREATE TABLE `assets` (
   KEY `idx_assets_ip` (`ip_address`)
 ) ENGINE=InnoDB AUTO_INCREMENT=74028 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `audit_log`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `audit_log` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `occurred_at` datetime NOT NULL,
+  `user_id` int unsigned DEFAULT NULL,
+  `username` varchar(255) DEFAULT NULL,
+  `action` varchar(64) NOT NULL,
+  `target_type` varchar(32) DEFAULT NULL,
+  `target_id` varchar(64) DEFAULT NULL,
+  `target_label` varchar(255) DEFAULT NULL,
+  `details` json DEFAULT NULL,
+  `ip_address` varchar(45) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_audit_log_occurred` (`occurred_at`),
+  KEY `idx_audit_log_user` (`user_id`,`occurred_at`),
+  KEY `idx_audit_log_action` (`action`,`occurred_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `cisa_kev`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;

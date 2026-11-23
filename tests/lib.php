@@ -98,3 +98,32 @@ function set_config(string $dottedKey, mixed $value): void
     unset($node);
     $ref->setValue(null, $cfg);
 }
+
+/**
+ * Renders a page in a separate PHP process (tests/render_page.php), as
+ * admin, client or anon; pass $post (URL-encoded) to submit a form instead.
+ * Returns everything it printed, including any "PHPERR:" lines.
+ */
+function render_page(string $page, string $query = '', string $role = 'admin', ?string $post = null): string
+{
+    $cmd = [PHP_BINARY, __DIR__ . '/render_page.php', $page, $query, $role];
+    if ($post !== null) {
+        $cmd[] = $post;
+    }
+    $proc = proc_open($cmd, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+    $out = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
+    proc_close($proc);
+    return $out;
+}
+
+/** The newest audit_log rows, oldest first, as [action, username, target_label, details] tuples. */
+function audit_rows(int $limit = 20): array
+{
+    $rows = \VulnDash\Lib\Database::getConnection()
+        ->query("SELECT action, username, target_label, details FROM audit_log ORDER BY id DESC LIMIT $limit")
+        ->fetchAll(\PDO::FETCH_NUM);
+    foreach ($rows as &$r) {
+        $r[3] = $r[3] !== null ? json_decode($r[3], true) : [];
+    }
+    return array_reverse($rows);
+}
