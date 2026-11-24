@@ -16,7 +16,7 @@ namespace VulnDash\Lib;
  * couple of KB syncs is a real gap - the KB sweep missed it.
  *
  * Kept in sync_state ('kb_missing_qids') as qid => first/last seen and host
- * count, updated by both host jobs, plus fetch attempts by the daily
+ * count, updated by both host jobs, plus fetch attempts by the 6-hourly
  * scripts/fetch_missing_kb_qids.php, which asks Qualys for every QID on the
  * list by id so nobody has to act on it by hand. A QID leaves the list only once it is
  * in knowledge_base - NOT because a run didn't see it: the hourly pull is
@@ -28,10 +28,10 @@ final class MissingKbQidRepository
     private const STATE_KEY = 'kb_missing_qids';
 
     /**
-     * Default for sync.kb_missing_warn_hours. Past this, a QID the daily
-     * fetch job has not yet tried means the job isn't running: a day and a
-     * half covers the longest normal wait (first seen just after the
-     * day's run) with margin. A QID the job asked for and Qualys didn't
+     * Default for sync.kb_missing_warn_hours. Past this, a QID the 6-hourly
+     * fetch job has not yet tried means the job isn't running. The longest
+     * normal wait is ~6 hours (first seen just after a run); a day and a
+     * half leaves generous margin for a skipped run or two. A QID the job asked for and Qualys didn't
      * return needs a person whatever its age - see needsAttention().
      */
     public const DEFAULT_WARN_HOURS = 36;
@@ -108,7 +108,7 @@ final class MissingKbQidRepository
     }
 
     /**
-     * Records that the daily fetch job asked Qualys for these QIDs and they
+     * Records that the missing-QID fetch job asked Qualys for these QIDs and they
      * didn't come back - so the panel can say Qualys isn't returning them,
      * which no amount of waiting fixes.
      *
@@ -147,9 +147,9 @@ final class MissingKbQidRepository
     }
 
     /**
-     * Whether the list needs a person: Qualys didn't return a QID the daily
+     * Whether the list needs a person: Qualys didn't return a QID the fetch
      * job asked for, or one has waited past warnHours() (the job isn't
-     * running). A QID simply waiting for its first daily fetch doesn't.
+     * running). A QID simply waiting for its first fetch doesn't.
      *
      * @param array<int, array{qid: int, first_seen: string, fetch_attempts: int}> $outstanding
      */
@@ -231,7 +231,7 @@ final class MissingKbQidRepository
             . ($parts !== [] ? ': ' . implode(', ', $parts) . (count($skipped) > 10 ? ', ...' : '') : '') . ".\n";
         if ($outstanding !== []) {
             $line .= '  Outstanding: ' . count($outstanding) . ' QID(s), oldest first seen ' . $outstanding[0]['first_seen']
-                . '. scripts/fetch_missing_kb_qids.php fetches them on its daily run; to fetch now: php scripts/diagnose_kb.php --qid='
+                . '. scripts/fetch_missing_kb_qids.php fetches them on its next run (every 6 hours); to fetch now: php scripts/diagnose_kb.php --qid='
                 . implode(',', array_slice(array_column($outstanding, 'qid'), 0, 50)) . " --fix\n";
         }
         return $line;

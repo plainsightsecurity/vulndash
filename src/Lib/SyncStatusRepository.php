@@ -72,8 +72,8 @@ class SyncStatusRepository
      *     detections were skipped for having no local KB row (see
      *     MissingKbQidRepository). A healthy sync becomes 'warning' only when
      *     the list needs a person (MissingKbQidRepository::needsAttention()):
-     *     Qualys didn't return a QID the daily fetch job asked for, or one
-     *     has waited past kb_missing_warn_hours. Waiting for the next daily
+     *     Qualys didn't return a QID the missing-QID fetch job asked for, or one
+     *     has waited past kb_missing_warn_hours. Waiting for the next 6-hourly
      *     fetch is normal and stays healthy.
      */
     public static function getSyncStatuses(): array

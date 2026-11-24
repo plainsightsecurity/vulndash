@@ -361,14 +361,14 @@ $postureTagSuffix = $viewTagId !== null ? ' in this tag' : '';
             ?>
             <?php if ($refused !== []): ?>
             Qualys didn't return <?= count($refused) === count($missingQids) ? (count($refused) === 1 ? 'it' : 'them') : count($refused) . ' of them' ?>
-            when the daily fetch asked (<?= Helpers::e(implode(', ', array_map(static fn(array $m): string => (string)$m['qid'], array_slice($refused, 0, 5)))) ?><?= count($refused) > 5 ? ', …' : '' ?>;
+            when the missing-QID fetch asked (<?= Helpers::e(implode(', ', array_map(static fn(array $m): string => (string)$m['qid'], array_slice($refused, 0, 5)))) ?><?= count($refused) > 5 ? ', …' : '' ?>;
             last tried <?= Helpers::e(Helpers::relativeTime(max(array_column($refused, 'last_fetch_at')))) ?>) - likely not visible to this subscription, or retired. Check with
             <code class="mono">php scripts/diagnose_kb.php --qid=<?= Helpers::e(implode(',', array_slice(array_column($refused, 'qid'), 0, 50))) ?></code>
             <?php elseif ($sync['state'] === 'warning'): ?>
-            Waiting over <?= (int)$sync['kb_missing_warn_hours'] ?> hours, so the daily <code class="mono">fetch_missing_kb_qids.php</code> job doesn't seem to be running. Fetch now with
+            Waiting over <?= (int)$sync['kb_missing_warn_hours'] ?> hours, so the 6-hourly <code class="mono">fetch_missing_kb_qids.php</code> job doesn't seem to be running. Fetch now with
             <code class="mono">php scripts/diagnose_kb.php --qid=<?= Helpers::e($missingIdList) ?> --fix</code>
             <?php else: ?>
-            Fetched automatically by the daily KB gap job - nothing to do.
+            Fetched automatically by the missing-QID job (runs every 6 hours) - nothing to do.
             <?php endif; ?>
         </div>
         <?php endif; ?>

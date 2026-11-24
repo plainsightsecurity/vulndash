@@ -18,8 +18,8 @@ declare(strict_types=1);
  * recorded, which turns the dashboard's Host detection card amber: waiting
  * won't fix that one (usually it isn't visible to this subscription, or
  * has been retired), so it needs a look. A failed CALL records nothing
- * against the QIDs - that's not Qualys refusing them - and is retried the
- * next day; the run exits 1 with the reason.
+ * against the QIDs - that's not Qualys refusing them - and is retried on the
+ * next run; the run exits 1 with the reason.
  *
  * Takes the KB sync's lock, so the two never call the KnowledgeBase
  * endpoint at the same time. Round-robins qualys.kb_api_versions across
@@ -27,9 +27,10 @@ declare(strict_types=1);
  * qualys.api_version once if the picked version fails. Nothing on the
  * list means no call at all.
  *
- * Suggested cron entry (as www-data) - daily, after the 00:40 reconcile has
- * checked every host and before the 06:40 one writes the detections:
- *   25 1 * * * php /var/www/dashboard.plainsightsecurity.co.uk/scripts/fetch_missing_kb_qids.php >> /var/log/vulndash/kb_missing_fetch.log 2>&1
+ * Cron entry (as www-data) - every 6 hours, 15 minutes before each
+ * reconcile (40 0,6,12,18), so a QID fetched here has its detections
+ * written by the reconcile that follows:
+ *   25 0,6,12,18 * * * php /var/www/dashboard.plainsightsecurity.co.uk/scripts/fetch_missing_kb_qids.php >> /var/log/vulndash/kb_missing_fetch.log 2>&1
  *
  * Usage:
  *   php scripts/fetch_missing_kb_qids.php            # fetch and upsert
