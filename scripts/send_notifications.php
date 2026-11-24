@@ -104,7 +104,7 @@ try {
         $isAdmin = $r['is_admin'] === 1;
         // Admins are scoped platform-wide inside scopeHasNewActivity(); their tag
         // list is irrelevant there, so skip the lookup for them.
-        $tagIds  = $isAdmin ? [] : UserRepository::getUserTagIds($userId);
+        $tagIds  = $isAdmin ? [] : UserRepository::getEffectiveTagIds($userId);
         $since   = $r['notify_watermark_id'] ?? 0;
 
         $hasNew = VulnerabilityRepository::scopeHasNewActivity($tagIds, $isAdmin, $since, $userId);

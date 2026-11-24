@@ -57,7 +57,7 @@ class NotificationRepository
         $stmt = $pdo->prepare(
             "SELECT id, username, email, is_admin, notify_frequency, notify_watermark_id
              FROM users
-             WHERE is_active = 1
+             WHERE is_active = 1 AND " . UserRepository::ORG_ACTIVE_CONDITION . "
                AND notify_frequency <> 'off'
                AND (
                      (notify_frequency = 'daily'

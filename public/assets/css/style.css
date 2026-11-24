@@ -2951,3 +2951,8 @@ a.movement-card .movement-card-hint {
     .guide-layout { grid-template-columns: 1fr; }
     .guide-toc { position: static; }
 }
+
+/* Manage Users > Import from CSV (src/Lib/UserImport.php). */
+.import-example { background: var(--ink); border: 1px solid var(--hairline); border-radius: var(--radius); padding: 0.5rem 0.75rem; font-size: 0.8rem; overflow-x: auto; margin: 0 0 0.75rem; }
+.import-problems { margin: 0 0 0.75rem; padding-left: 1.2rem; font-size: 0.85rem; }
+.import-problems li { margin-bottom: 0.2rem; }

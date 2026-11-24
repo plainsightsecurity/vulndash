@@ -283,6 +283,31 @@ CREATE TABLE `login_throttle` (
   KEY `idx_login_throttle_time` (`attempted_at`)
 ) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `organisation_tags`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `organisation_tags` (
+  `organisation_id` int unsigned NOT NULL,
+  `tag_id` int unsigned NOT NULL,
+  PRIMARY KEY (`organisation_id`,`tag_id`),
+  KEY `fk_organisation_tags_tag` (`tag_id`),
+  CONSTRAINT `fk_organisation_tags_org` FOREIGN KEY (`organisation_id`) REFERENCES `organisations` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_organisation_tags_tag` FOREIGN KEY (`tag_id`) REFERENCES `tags` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `organisations`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `organisations` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `name` varchar(191) NOT NULL,
+  `is_active` tinyint(1) NOT NULL DEFAULT '1',
+  `max_users` int unsigned DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_organisations_name` (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `password_reset_tokens`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
@@ -487,11 +512,15 @@ CREATE TABLE `users` (
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `kev_alerts` tinyint(1) NOT NULL DEFAULT '1',
   `kev_alert_baseline_at` datetime DEFAULT NULL,
+  `organisation_id` int unsigned DEFAULT NULL,
+  `is_org_admin` tinyint(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_users_username` (`username`),
   UNIQUE KEY `uq_users_email` (`email`),
   KEY `fk_users_default_tag` (`default_tag_id`),
-  CONSTRAINT `fk_users_default_tag` FOREIGN KEY (`default_tag_id`) REFERENCES `tags` (`id`) ON DELETE SET NULL
+  KEY `fk_users_organisation` (`organisation_id`),
+  CONSTRAINT `fk_users_default_tag` FOREIGN KEY (`default_tag_id`) REFERENCES `tags` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_users_organisation` FOREIGN KEY (`organisation_id`) REFERENCES `organisations` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB AUTO_INCREMENT=16 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;

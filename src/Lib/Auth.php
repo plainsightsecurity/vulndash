@@ -69,7 +69,8 @@ class Auth
         // constraint, and same OR-lookup shape, as
         // UserRepository::findByUsernameOrEmail().
         $stmt = $pdo->prepare(
-            'SELECT id, username, password_hash, is_admin, is_active, failed_login_attempts, locked_until, mfa_enabled
+            'SELECT id, username, password_hash, is_admin, failed_login_attempts, locked_until, mfa_enabled,
+                    (is_active = 1 AND ' . UserRepository::ORG_ACTIVE_CONDITION . ') AS is_active
              FROM users WHERE username = :login_username OR email = :login_email LIMIT 1'
         );
         $stmt->execute([
@@ -303,9 +304,8 @@ class Auth
     /** @return int[] */
     private static function loadUserTagIds(\PDO $pdo, int $userId): array
     {
-        $stmt = $pdo->prepare('SELECT tag_id FROM user_tags WHERE user_id = :id');
-        $stmt->execute(['id' => $userId]);
-        return array_map('intval', array_column($stmt->fetchAll(), 'tag_id'));
+        // Own extras plus the organisation's tags (UserRepository::EFFECTIVE_TAGS_SQL).
+        return UserRepository::getEffectiveTagIds($userId);
     }
 
     public static function check(): void
@@ -369,6 +369,36 @@ class Auth
         $_SESSION['is_admin']      = $account['is_admin'];
         $_SESSION['tag_ids']       = $account['tag_ids'];
         $_SESSION['can_uninstall'] = $account['can_uninstall'];
+        $_SESSION['is_org_admin']  = $account['is_org_admin'];
+        $_SESSION['organisation_id'] = $account['organisation_id'];
+    }
+
+    /**
+     * For /org/* pages: signed in, a member of an active organisation and its
+     * organisation admin, as of THIS request (check() re-reads all of that).
+     * Plainsight admins aren't in an organisation and use /admin pages.
+     *
+     * @return int the organisation id every action on the page is confined to
+     */
+    public static function requireOrgAdmin(): int
+    {
+        self::check();
+        $orgId = isset($_SESSION['organisation_id']) ? (int)$_SESSION['organisation_id'] : 0;
+        if (empty($_SESSION['is_org_admin']) || $orgId <= 0) {
+            self::forbidden();
+        }
+        return $orgId;
+    }
+
+    private static function forbidden(): never
+    {
+        http_response_code(403);
+        header('Content-Type: text/html; charset=UTF-8');
+        echo '<!DOCTYPE html><html><head><title>403 Forbidden</title></head>'
+           . '<body style="font-family:system-ui,sans-serif;max-width:32rem;margin:4rem auto;padding:0 1.5rem;">'
+           . '<h1>403 Forbidden</h1><p>You do not have permission to view this page.</p>'
+           . '<p><a href="/dashboard">Return to dashboard</a></p></body></html>';
+        exit;
     }
 
     /** Blocks non-admins from admin-only pages with a plain 403, rather than redirecting. */

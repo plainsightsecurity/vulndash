@@ -81,8 +81,8 @@ $appName = Config::get('app.name') ?? 'Vulnerability Management Dashboard';
             '/guide'       => 'User guide',
         ];
         $adminLinks = !empty($_SESSION['is_admin'])
-            ? ['/admin/users' => 'Manage Users', '/admin/audit_log' => 'Audit Log', '/admin/api_usage' => 'API Usage']
-            : [];
+            ? ['/admin/users' => 'Manage Users', '/admin/organisations' => 'Organisations', '/admin/audit_log' => 'Audit Log', '/admin/api_usage' => 'API Usage']
+            : (!empty($_SESSION['is_org_admin']) ? ['/org/users' => 'My organisation'] : []);
         $inAccountMenu = isset($accountLinks[$navPath]) || isset($adminLinks[$navPath]);
         ?>
         <nav class="site-nav" id="siteNav">
@@ -118,7 +118,7 @@ $appName = Config::get('app.name') ?? 'Vulnerability Management Dashboard';
                 </button>
                 <div class="account-menu-panel" id="accountMenu" hidden>
                     <?php if ($adminLinks !== []): ?>
-                    <span class="account-menu-heading">Admin</span>
+                    <span class="account-menu-heading"><?= !empty($_SESSION['is_admin']) ? 'Admin' : 'Organisation' ?></span>
                     <?php foreach ($adminLinks as $href => $label): ?>
                     <a href="<?= $href ?>"<?= $navPath === $href ? ' aria-current="page"' : '' ?>><?= $label ?></a>
                     <?php endforeach; ?>

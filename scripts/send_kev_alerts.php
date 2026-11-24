@@ -81,7 +81,7 @@ try {
     $emailed = $baselined = $nothingNew = $failed = 0;
 
     foreach ($recipients as $r) {
-        $tagIds  = $r['is_admin'] ? [] : UserRepository::getUserTagIds($r['id']);
+        $tagIds  = $r['is_admin'] ? [] : UserRepository::getEffectiveTagIds($r['id']);
         $current = VulnerabilityRepository::getOpenKevKeys($tagIds, $r['is_admin'], $r['id']);
 
         if (!$r['baselined']) {

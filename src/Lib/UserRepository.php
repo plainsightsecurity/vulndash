@@ -35,8 +35,28 @@ class UserRepository
         'role'       => ['u.is_admin', true],
         'tags'       => ['tag_names', false],
         'mfa'        => ['u.mfa_enabled', true],
+        'organisation' => ['organisation_name', false],
         'last_login' => ['u.last_login_at', false],
     ];
+
+    /**
+     * Every (user_id, tag_id) an account can see (2026-11 organisations): its
+     * own user_tags - the optional per-user extras - plus every tag of its
+     * organisation while that organisation is active. Use this, never
+     * user_tags alone, for anything that decides access or recipients;
+     * user_tags on its own is only "extras set on this account".
+     */
+    public const EFFECTIVE_TAGS_SQL = '(SELECT ut_e.user_id, ut_e.tag_id FROM user_tags ut_e
+        UNION SELECT u_e.id, ot_e.tag_id FROM users u_e
+            JOIN organisations o_e ON o_e.id = u_e.organisation_id AND o_e.is_active = 1
+            JOIN organisation_tags ot_e ON ot_e.organisation_id = o_e.id)';
+
+    /**
+     * WHERE condition (on an unaliased users table) for "not in a suspended
+     * organisation". A suspended organisation's members can't sign in, are
+     * signed out on their next request and get no emails.
+     */
+    public const ORG_ACTIVE_CONDITION = '(organisation_id IS NULL OR organisation_id IN (SELECT o_a.id FROM organisations o_a WHERE o_a.is_active = 1))';
 
     /** Filter value for listUsers()'s $tagFilter: accounts with no tags at all. */
     public const TAG_FILTER_NONE = 'none';
@@ -51,12 +71,12 @@ class UserRepository
      *
      * @param int|string|null $tagFilter
      */
-    public static function listUsers(?string $search = null, int|string|null $tagFilter = null, ?string $sort = null, string $dir = 'asc'): array
+    public static function listUsers(?string $search = null, int|string|null $tagFilter = null, ?string $sort = null, string $dir = 'asc', int|string|null $orgFilter = null): array
     {
         [$sortExpr, $flip] = self::USER_SORT_COLUMNS[$sort ?? 'username'] ?? self::USER_SORT_COLUMNS['username'];
         $descending = (strtolower($dir) === 'desc') !== $flip;
         // Accounts with no tags / never signed in go last in either direction.
-        $nullsLast = in_array($sortExpr, ['tag_names', 'u.last_login_at'], true) ? "{$sortExpr} IS NULL, " : '';
+        $nullsLast = in_array($sortExpr, ['tag_names', 'u.last_login_at', 'organisation_name'], true) ? "{$sortExpr} IS NULL, " : '';
         $orderBy = $nullsLast . $sortExpr . ($descending ? ' DESC' : ' ASC') . ($sortExpr !== 'u.username' ? ', u.username ASC' : '');
 
         $where = [];
@@ -68,15 +88,26 @@ class UserRepository
             $params['q_username'] = $like;
             $params['q_email'] = $like;
         }
+        // Tag filters match what the account can SEE (its own extras plus its
+        // organisation's tags), so "No tags" really means "sees nothing".
         if ($tagFilter === self::TAG_FILTER_NONE) {
-            $where[] = 'NOT EXISTS (SELECT 1 FROM user_tags fut WHERE fut.user_id = u.id)';
+            $where[] = 'NOT EXISTS (SELECT 1 FROM ' . self::EFFECTIVE_TAGS_SQL . ' fut WHERE fut.user_id = u.id)';
         } elseif (is_int($tagFilter)) {
-            $where[] = 'EXISTS (SELECT 1 FROM user_tags fut WHERE fut.user_id = u.id AND fut.tag_id = :tag_id)';
+            $where[] = 'EXISTS (SELECT 1 FROM ' . self::EFFECTIVE_TAGS_SQL . ' fut WHERE fut.user_id = u.id AND fut.tag_id = :tag_id)';
             $params['tag_id'] = $tagFilter;
+        }
+        if ($orgFilter === self::TAG_FILTER_NONE) {
+            $where[] = 'u.organisation_id IS NULL';
+        } elseif (is_int($orgFilter)) {
+            $where[] = 'u.organisation_id = :org_id';
+            $params['org_id'] = $orgFilter;
         }
 
         $stmt = Database::getConnection()->prepare("
             SELECT u.id, u.username, u.email, u.is_admin, u.can_uninstall_agents, u.is_active, u.mfa_enabled, u.last_login_at,
+                   u.organisation_id, u.is_org_admin,
+                   (SELECT o.name FROM organisations o WHERE o.id = u.organisation_id) AS organisation_name,
+                   (SELECT o.is_active FROM organisations o WHERE o.id = u.organisation_id) AS organisation_active,
                    GROUP_CONCAT(t.name ORDER BY t.name SEPARATOR ', ') AS tag_names,
                    (SELECT COUNT(*) FROM user_trusted_devices td
                     WHERE td.user_id = u.id AND td.revoked_at IS NULL AND td.expires_at > NOW()) AS trusted_device_count
@@ -100,7 +131,8 @@ class UserRepository
     {
         $pdo = Database::getConnection();
         $stmt = $pdo->prepare(
-            'SELECT id, username, email, is_admin, is_active, mfa_enabled, mfa_confirmed_at, last_login_at
+            'SELECT id, username, email, is_admin, is_active, mfa_enabled, mfa_confirmed_at, last_login_at,
+                    organisation_id, is_org_admin
              FROM users WHERE id = :id'
         );
         $stmt->execute(['id' => $id]);
@@ -125,7 +157,7 @@ class UserRepository
         // prepared statement protocol doesn't allow one named placeholder
         // to appear more than once in a single query.
         $stmt = Database::getConnection()->prepare(
-            'SELECT id, username, email, is_active FROM users
+            'SELECT id, username, email, (is_active = 1 AND ' . self::ORG_ACTIVE_CONDITION . ') AS is_active FROM users
              WHERE username = :identifier1 OR email = :identifier2 LIMIT 1'
         );
         $stmt->execute(['identifier1' => $identifier, 'identifier2' => $identifier]);
@@ -148,7 +180,36 @@ class UserRepository
         return $row && password_verify($password, $row['password_hash']);
     }
 
-    /** @return int[] local tag table IDs currently assigned to the user */
+    /**
+     * Every tag the account can see: its own extras plus its active
+     * organisation's tags. What notifications, KEV alerts and sign-in use.
+     *
+     * @return int[]
+     */
+    public static function getEffectiveTagIds(int $userId): array
+    {
+        $stmt = Database::getConnection()->prepare('SELECT DISTINCT tag_id FROM ' . self::EFFECTIVE_TAGS_SQL . ' e WHERE e.user_id = :id');
+        $stmt->execute(['id' => $userId]);
+        return array_map('intval', array_column($stmt->fetchAll(), 'tag_id'));
+    }
+
+    /**
+     * Assigns (or clears, with null) an account's organisation, and whether
+     * it's that organisation's admin. An account with no organisation can't
+     * be an organisation admin.
+     */
+    public static function setOrganisation(int $userId, ?int $organisationId, bool $isOrgAdmin): void
+    {
+        Database::getConnection()->prepare('UPDATE users SET organisation_id = :org, is_org_admin = :oa WHERE id = :id')
+            ->execute(['org' => $organisationId, 'oa' => $organisationId !== null && $isOrgAdmin ? 1 : 0, 'id' => $userId]);
+    }
+
+    /**
+     * The account's OWN tags - the per-user extras set on it in Manage Users,
+     * not including its organisation's. Use getEffectiveTagIds() for access.
+     *
+     * @return int[]
+     */
     public static function getUserTagIds(int $userId): array
     {
         $pdo = Database::getConnection();
@@ -205,18 +266,25 @@ class UserRepository
      * u.id is the primary key, so grouping by it alone is valid under
      * ONLY_FULL_GROUP_BY (the other users columns depend on it).
      *
-     * @return array{session_epoch: int, is_active: bool, is_admin: bool, can_uninstall: bool, tag_ids: int[]}|null
+     * Organisations (2026-11): tag_ids are the EFFECTIVE tags (own extras
+     * plus the active organisation's), and an account in a suspended
+     * organisation comes back is_active = false, so check() signs it out.
+     *
+     * @return array{session_epoch: int, is_active: bool, is_admin: bool, can_uninstall: bool, tag_ids: int[],
+     *               organisation_id: ?int, is_org_admin: bool}|null
      *         null if the account no longer exists
      */
     public static function getSessionAccount(int $userId): ?array
     {
         $stmt = Database::getConnection()->prepare(
-            'SELECT u.session_epoch, u.is_active, u.is_admin, u.can_uninstall_agents,
-                    GROUP_CONCAT(ut.tag_id) AS tag_ids
+            'SELECT u.session_epoch, u.is_active, u.is_admin, u.can_uninstall_agents, u.organisation_id, u.is_org_admin,
+                    (u.organisation_id IS NULL OR o.is_active = 1) AS org_active,
+                    GROUP_CONCAT(DISTINCT e.tag_id) AS tag_ids
              FROM users u
-             LEFT JOIN user_tags ut ON ut.user_id = u.id
+             LEFT JOIN organisations o ON o.id = u.organisation_id
+             LEFT JOIN ' . self::EFFECTIVE_TAGS_SQL . ' e ON e.user_id = u.id
              WHERE u.id = :id
-             GROUP BY u.id'
+             GROUP BY u.id, o.is_active'
         );
         $stmt->execute(['id' => $userId]);
         $row = $stmt->fetch();
@@ -225,7 +293,9 @@ class UserRepository
         }
         return [
             'session_epoch' => (int)$row['session_epoch'],
-            'is_active'     => (int)$row['is_active'] === 1,
+            'is_active'     => (int)$row['is_active'] === 1 && (int)$row['org_active'] === 1,
+            'organisation_id' => $row['organisation_id'] !== null ? (int)$row['organisation_id'] : null,
+            'is_org_admin'  => (int)$row['is_org_admin'] === 1 && $row['organisation_id'] !== null,
             'is_admin'      => (int)$row['is_admin'] === 1,
             'can_uninstall' => (int)$row['can_uninstall_agents'] === 1,
             'tag_ids'       => $row['tag_ids'] !== null && $row['tag_ids'] !== ''
@@ -397,7 +467,7 @@ class UserRepository
      * @param int[] $tagIds local tag table IDs (not Qualys tag IDs)
      * @throws \RuntimeException on duplicate username/email
      */
-    public static function createUser(string $username, string $email, bool $isAdmin, array $tagIds, bool $canUninstall = false): int
+    public static function createUser(string $username, string $email, bool $isAdmin, array $tagIds, bool $canUninstall = false, ?int $organisationId = null, bool $isOrgAdmin = false): int
     {
         $pdo = Database::getConnection();
         $pdo->beginTransaction();
@@ -420,6 +490,10 @@ class UserRepository
             $userId = (int)$pdo->lastInsertId();
 
             self::syncUserTags($pdo, $userId, $tagIds);
+            if ($organisationId !== null) {
+                $pdo->prepare('UPDATE users SET organisation_id = :org, is_org_admin = :oa WHERE id = :id')
+                    ->execute(['org' => $organisationId, 'oa' => $isOrgAdmin ? 1 : 0, 'id' => $userId]);
+            }
 
             $pdo->commit();
             return $userId;

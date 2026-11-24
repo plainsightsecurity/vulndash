@@ -10,8 +10,10 @@ use VulnDash\Lib\Config;
 use VulnDash\Lib\Helpers;
 use VulnDash\Lib\Mailer;
 use VulnDash\Lib\MfaService;
+use VulnDash\Lib\OrganisationRepository;
 use VulnDash\Lib\PasswordResetRepository;
 use VulnDash\Lib\TrustedDeviceRepository;
+use VulnDash\Lib\UserImport;
 use VulnDash\Lib\UserRepository;
 
 /**
@@ -55,6 +57,10 @@ function userListFilter(array $query): array
     $tag = (string)($query['tag'] ?? '');
     if ($tag === UserRepository::TAG_FILTER_NONE || ctype_digit($tag)) {
         $filter['tag'] = $tag;
+    }
+    $org = (string)($query['org'] ?? '');
+    if ($org === UserRepository::TAG_FILTER_NONE || ctype_digit($org)) {
+        $filter['org'] = $org;
     }
     $sort = (string)($query['sort'] ?? '');
     if (isset(UserRepository::USER_SORT_COLUMNS[$sort])) {
@@ -101,6 +107,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $isAdmin       = !empty($_POST['is_admin']);
                 $canUninstall  = !empty($_POST['can_uninstall']);
                 $tagIds        = array_map('intval', (array)($_POST['tag_ids'] ?? []));
+                $orgId         = (int)($_POST['organisation_id'] ?? 0) ?: null;
+                $isOrgAdmin    = $orgId !== null && !empty($_POST['is_org_admin']);
+                $org           = $orgId !== null ? OrganisationRepository::get($orgId) : null;
+                if ($orgId !== null && $org === null) {
+                    throw new \RuntimeException('That organisation no longer exists.');
+                }
 
                 if ($username === '' || $email === '') {
                     throw new \RuntimeException('Username and email are both required.');
@@ -108,13 +120,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (($emailError = Helpers::emailError($email)) !== null) {
                     throw new \RuntimeException($emailError . ' The account was not created.');
                 }
-                if (!$isAdmin && empty($tagIds)) {
-                    throw new \RuntimeException('Assign at least one tag, or make this an admin account - otherwise the account will see no data at all.');
+                if (!$isAdmin && empty($tagIds) && ($org === null || $org['tag_ids'] === [])) {
+                    throw new \RuntimeException('Assign at least one tag, or an organisation that has tags, or make this an admin account - otherwise the account will see no data at all.');
                 }
 
-                $userId = UserRepository::createUser($username, $email, $isAdmin, $tagIds, $canUninstall);
+                $userId = UserRepository::createUser($username, $email, $isAdmin, $tagIds, $canUninstall, $isAdmin ? null : $orgId, !$isAdmin && $isOrgAdmin);
                 AuditLog::record('admin.user_created', $auditTarget($userId) + ['details' => [
                     'email' => $email, 'admin' => $isAdmin, 'can_uninstall' => $canUninstall, 'tags' => $tagNamesFor($tagIds),
+                    'organisation' => $org['name'] ?? null, 'org_admin' => $isOrgAdmin,
                 ]]);
 
                 if (sendPasswordLink($userId, $email, $username, PasswordResetRepository::PURPOSE_SETUP)) {
@@ -133,8 +146,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $userId = (int)($_POST['user_id'] ?? 0);
                 $tagIds = array_map('intval', (array)($_POST['tag_ids'] ?? []));
                 $user = UserRepository::getUser($userId);
-                if ($user && !$user['is_admin'] && empty($tagIds)) {
-                    throw new \RuntimeException('This account has no admin flag, so it needs at least one tag or it will see no data.');
+                $userOrg = $user && $user['organisation_id'] !== null ? OrganisationRepository::get((int)$user['organisation_id']) : null;
+                if ($user && !$user['is_admin'] && empty($tagIds) && ($userOrg === null || $userOrg['tag_ids'] === [])) {
+                    throw new \RuntimeException('This account has no admin flag and no organisation with tags, so it needs at least one tag or it will see no data.');
                 }
                 $tagsBefore = $tagNamesFor(UserRepository::getUserTagIds($userId));
                 UserRepository::updateUserTags($userId, $tagIds);
@@ -142,6 +156,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'before' => $tagsBefore, 'after' => $tagNamesFor($tagIds),
                 ]]);
                 Helpers::setFlash('Tag assignments updated.');
+                break;
+
+            case 'import_csv':
+                $file = $_FILES['csv'] ?? null;
+                if (!is_array($file) || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK || !is_uploaded_file((string)$file['tmp_name'])) {
+                    throw new \RuntimeException('Choose a CSV file to import.');
+                }
+                $parsed = UserImport::parse((string)file_get_contents((string)$file['tmp_name'], false, null, 0, UserImport::MAX_BYTES + 1));
+                if ($parsed['errors'] !== []) {
+                    $_SESSION['import_result'] = ['errors' => $parsed['errors']];
+                    Helpers::setFlash('Nothing was imported - fix the problems listed under "Import from CSV" and try again.', 'error');
+                    break;
+                }
+                $sendEmails = !empty($_POST['send_emails']);
+                $result = UserImport::run($parsed['rows'], $sendEmails, static fn (int $id, string $email, string $username): bool
+                    => sendPasswordLink($id, $email, $username, PasswordResetRepository::PURPOSE_SETUP));
+                AuditLog::record('admin.users_imported', ['details' => [
+                    'created' => $result['created'], 'failed' => $result['failed'], 'emails_sent' => $sendEmails,
+                    'email_failed' => $result['email_failed'],
+                ]]);
+                $_SESSION['import_result'] = $result + ['warnings' => $parsed['warnings'], 'emails' => $sendEmails];
+                Helpers::setFlash('Imported ' . count($result['created']) . ' account(s)'
+                    . ($sendEmails ? ', each emailed a password setup link' : ' - no emails sent; use "Email reset link" on each when ready')
+                    . '. Details under "Import from CSV".', $result['failed'] === [] && $result['email_failed'] === [] ? 'success' : 'error');
+                break;
+
+            case 'set_organisation':
+                $userId = (int)($_POST['user_id'] ?? 0);
+                $user = UserRepository::getUser($userId) ?? throw new \RuntimeException('That account no longer exists.');
+                if ($user['is_admin']) {
+                    throw new \RuntimeException('Admin accounts see everything and are not members of an organisation.');
+                }
+                $orgId = (int)($_POST['organisation_id'] ?? 0) ?: null;
+                $org = $orgId !== null ? (OrganisationRepository::get($orgId) ?? throw new \RuntimeException('That organisation no longer exists.')) : null;
+                $isOrgAdmin = $orgId !== null && !empty($_POST['is_org_admin']);
+                $before = $user['organisation_id'] !== null ? (OrganisationRepository::get((int)$user['organisation_id'])['name'] ?? null) : null;
+                if ($org === null && UserRepository::getUserTagIds($userId) === []) {
+                    throw new \RuntimeException("{$user['username']} has no tags of their own, so removing their organisation would leave them seeing nothing. Give them a tag first, or deactivate the account.");
+                }
+                UserRepository::setOrganisation($userId, $orgId, $isOrgAdmin);
+                AuditLog::record('admin.user_org_changed', $auditTarget($userId) + ['details' => [
+                    'before' => ['organisation' => $before, 'org_admin' => (bool)$user['is_org_admin']],
+                    'after'  => ['organisation' => $org['name'] ?? null, 'org_admin' => $isOrgAdmin],
+                ]]);
+                $over = $org !== null && $org['max_users'] !== null && $user['is_active'] && (int)$user['organisation_id'] !== $orgId
+                    && $org['active_users'] + 1 > $org['max_users'];
+                Helpers::setFlash($org === null
+                    ? "{$user['username']} is no longer in an organisation."
+                    : "{$user['username']} is now in {$org['name']}" . ($isOrgAdmin ? ' as an organisation admin' : '') . '.'
+                      . ($over ? " That takes {$org['name']} over its limit of {$org['max_users']} active users; its organisation admins can't add anyone until it's back under." : ''));
                 break;
 
             case 'update_email':
@@ -371,8 +435,14 @@ $filterTag = isset($userFilter['tag'])
     : null;
 $userSort = $userFilter['sort'] ?? 'username';
 $userDir  = $userFilter['dir'] ?? 'asc';
-$users = UserRepository::listUsers($userFilter['q'] ?? null, $filterTag, $userSort, $userDir);
-$isFiltered = isset($userFilter['q']) || isset($userFilter['tag']);
+$filterOrg = isset($userFilter['org'])
+    ? ($userFilter['org'] === UserRepository::TAG_FILTER_NONE ? UserRepository::TAG_FILTER_NONE : (int)$userFilter['org'])
+    : null;
+$users = UserRepository::listUsers($userFilter['q'] ?? null, $filterTag, $userSort, $userDir, $filterOrg);
+$isFiltered = isset($userFilter['q']) || isset($userFilter['tag']) || isset($userFilter['org']);
+$organisations = OrganisationRepository::listAll();
+$importResult = $_SESSION['import_result'] ?? null;
+unset($_SESSION['import_result']);
 $totalUsers = $isFiltered ? UserRepository::countUsers() : count($users);
 $tags  = UserRepository::listTags();
 
@@ -511,7 +581,25 @@ require __DIR__ . '/../../src/views/header.php';
             <span>Can uninstall agents <span class="checkbox-hint">(may queue Cloud Agent uninstalls from the Assets page; admins always can)</span></span>
         </label>
 
-        <p class="page-subtitle" style="margin: 0 0 0.25rem;">Tag scope (ignored for admin accounts):</p>
+        <?php if ($organisations !== []): ?>
+        <div class="inline-form-row" style="margin: 0 0 0.75rem; align-items: flex-end;">
+            <label class="field">
+                <span>Organisation <span class="checkbox-hint">(ignored for admin accounts)</span></span>
+                <select name="organisation_id">
+                    <option value="">None</option>
+                    <?php foreach ($organisations as $o): ?>
+                    <option value="<?= $o['id'] ?>"><?= Helpers::e($o['name']) ?><?= $o['is_active'] ? '' : ' (suspended)' ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </label>
+            <label class="checkbox-field">
+                <input type="checkbox" name="is_org_admin" value="1">
+                <span>Organisation admin <span class="checkbox-hint">(may add and deactivate its users)</span></span>
+            </label>
+        </div>
+        <?php endif; ?>
+
+        <p class="page-subtitle" style="margin: 0 0 0.25rem;">Extra tags <span class="checkbox-hint">(on top of the organisation's; ignored for admin accounts)</span>:</p>
         <?php if (empty($tags)): ?>
         <p class="no-tags">No tags exist yet - add one in the "Tags" section below first, or check "Admin account" above.</p>
         <?php else: ?>
@@ -522,6 +610,46 @@ require __DIR__ . '/../../src/views/header.php';
 
         <button type="submit" class="btn btn-primary">Create account</button>
     </form>
+</div>
+
+<div class="panel">
+    <details<?= $importResult !== null ? ' open' : '' ?>>
+        <summary><h2 style="display: inline;">Import from CSV</h2> <span class="checkbox-hint">add many client accounts at once</span></summary>
+
+        <?php if ($importResult !== null): ?>
+        <div style="margin: 0.75rem 0;">
+            <?php if (!empty($importResult['errors'])): ?>
+            <p class="form-error" style="margin-bottom: 0.5rem;">Nothing was imported. Problems found:</p>
+            <ul class="import-problems"><?php foreach ($importResult['errors'] as $e): ?><li><?= Helpers::e($e) ?></li><?php endforeach; ?></ul>
+            <?php else: ?>
+            <p>Created <?= count($importResult['created']) ?> account(s)<?= $importResult['created'] !== [] ? ': ' . Helpers::e(implode(', ', $importResult['created'])) : '' ?>.</p>
+            <?php foreach (array_merge($importResult['warnings'] ?? [], $importResult['failed'] ?? []) as $w): ?><p class="checkbox-hint"><?= Helpers::e($w) ?></p><?php endforeach; ?>
+            <?php if (!empty($importResult['email_failed'])): ?>
+            <p class="form-error">Setup email failed for: <?= Helpers::e(implode(', ', $importResult['email_failed'])) ?> - check the server error log, then use "Email reset link" on each.</p>
+            <?php endif; ?>
+            <?php endif; ?>
+        </div>
+        <?php endif; ?>
+
+        <p class="checkbox-hint" style="margin: 0.75rem 0 0.4rem;">
+            First row must be a header. <strong>username</strong> and <strong>email</strong> are required; <strong>organisation</strong> (an existing organisation's name),
+            <strong>tags</strong> (extra tag names separated by <code>;</code>) and <strong>org_admin</strong> (yes/no) are optional.
+            Every row is checked first - if any has a problem, nothing is created. Imported accounts are clients, never admins. Up to <?= UserImport::MAX_ROWS ?> rows.
+        </p>
+        <pre class="import-example">username,email,organisation,tags,org_admin
+jsmith,jane.smith@wavehill.co.uk,Wavehill Ltd,,yes
+bjones,bob.jones@wavehill.co.uk,Wavehill Ltd,Wavehill-DMZ,no</pre>
+        <form method="post" enctype="multipart/form-data" class="inline-form-row" style="align-items: center;">
+            <input type="hidden" name="action" value="import_csv">
+            <input type="hidden" name="csrf_token" value="<?= Helpers::e($csrfToken) ?>">
+            <input type="file" name="csv" accept=".csv,text/csv" required>
+            <label class="checkbox-field">
+                <input type="checkbox" name="send_emails" value="1" checked>
+                <span>Email each a password setup link <span class="checkbox-hint">(untick to send later)</span></span>
+            </label>
+            <button type="submit" class="btn btn-primary">Import</button>
+        </form>
+    </details>
 </div>
 
 <div class="panel" id="users">
@@ -547,6 +675,16 @@ require __DIR__ . '/../../src/views/header.php';
                 <?php endforeach; ?>
             </select>
         </label>
+        <label class="field field-inline">
+            <span>Organisation</span>
+            <select name="org" onchange="this.form.submit();">
+                <option value="">Any</option>
+                <option value="<?= UserRepository::TAG_FILTER_NONE ?>" <?= $filterOrg === UserRepository::TAG_FILTER_NONE ? 'selected' : '' ?>>No organisation</option>
+                <?php foreach ($organisations as $o): ?>
+                <option value="<?= $o['id'] ?>" <?= $filterOrg === $o['id'] ? 'selected' : '' ?>><?= Helpers::e($o['name']) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </label>
         <?php if (isset($userFilter['sort'])): ?>
         <input type="hidden" name="sort" value="<?= Helpers::e($userSort) ?>">
         <input type="hidden" name="dir" value="<?= Helpers::e($userDir) ?>">
@@ -564,7 +702,8 @@ require __DIR__ . '/../../src/views/header.php';
                 <th><?= Helpers::sortLink('Username', 'username', $userSort, $userDir, '#users') ?></th>
                 <th><?= Helpers::sortLink('Email', 'email', $userSort, $userDir, '#users') ?></th>
                 <th><?= Helpers::sortLink('Role', 'role', $userSort, $userDir, '#users') ?></th>
-                <th><?= Helpers::sortLink('Tags', 'tags', $userSort, $userDir, '#users') ?></th>
+                <th><?= Helpers::sortLink('Organisation', 'organisation', $userSort, $userDir, '#users') ?></th>
+                <th><?= Helpers::sortLink('Extra tags', 'tags', $userSort, $userDir, '#users') ?></th>
                 <th><?= Helpers::sortLink('MFA', 'mfa', $userSort, $userDir, '#users') ?></th>
                 <th><?= Helpers::sortLink('Last login', 'last_login', $userSort, $userDir, '#users') ?></th>
                 <th>Actions</th>
@@ -572,7 +711,7 @@ require __DIR__ . '/../../src/views/header.php';
         </thead>
         <tbody>
             <?php if (empty($users)): ?>
-            <tr class="empty-row"><td colspan="7"><?= $isFiltered ? 'No users match these filters.' : 'No users yet.' ?></td></tr>
+            <tr class="empty-row"><td colspan="8"><?= $isFiltered ? 'No users match these filters.' : 'No users yet.' ?></td></tr>
             <?php else: foreach ($users as $u):
                 $userMfaEnabled = (bool)$u['mfa_enabled'];
                 $userDevices = $trustedDevicesByUser[(int)$u['id']] ?? [];
@@ -586,6 +725,13 @@ require __DIR__ . '/../../src/views/header.php';
                     <span class="badge badge-neutral" title="May queue Cloud Agent uninstalls from the Assets page">Uninstall</span>
                     <?php endif; ?>
                 </td>
+                <td class="nowrap">
+                    <?php if ($u['organisation_name'] !== null): ?>
+                    <?= Helpers::e($u['organisation_name']) ?>
+                    <?php if ((int)$u['organisation_active'] !== 1): ?><span class="badge badge-danger">Suspended</span><?php endif; ?>
+                    <?php if ((int)$u['is_org_admin'] === 1): ?><div class="checkbox-hint">org admin</div><?php endif; ?>
+                    <?php else: ?><span class="no-tags">—</span><?php endif; ?>
+                </td>
                 <td>
                     <?php if (!empty($u['tag_names'])): ?>
                     <div class="tag-chip-list">
@@ -595,6 +741,8 @@ require __DIR__ . '/../../src/views/header.php';
                     </div>
                     <?php elseif ($u['is_admin']): ?>
                     <span class="no-tags">all data (admin)</span>
+                    <?php elseif ($u['organisation_name'] !== null): ?>
+                    <span class="no-tags">organisation's only</span>
                     <?php else: ?>
                     <span class="no-tags">none - sees nothing</span>
                     <?php endif; ?>
@@ -637,6 +785,28 @@ require __DIR__ . '/../../src/views/header.php';
                         </div>
 
                         <?php if ((int)$u['id'] !== $currentUserId): ?>
+                        <?php if (!$u['is_admin'] && $organisations !== []): ?>
+                        <div class="user-manage-group">
+                            <h3>Organisation</h3>
+                            <form method="post" class="inline-form-row" style="align-items: center;">
+                                <input type="hidden" name="action" value="set_organisation">
+                                <input type="hidden" name="user_id" value="<?= (int)$u['id'] ?>">
+                                <input type="hidden" name="csrf_token" value="<?= Helpers::e($csrfToken) ?>">
+                                <select name="organisation_id" aria-label="Organisation for <?= Helpers::e($u['username']) ?>">
+                                    <option value="">None</option>
+                                    <?php foreach ($organisations as $o): ?>
+                                    <option value="<?= $o['id'] ?>" <?= (int)$u['organisation_id'] === $o['id'] ? 'selected' : '' ?>><?= Helpers::e($o['name']) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <label class="checkbox-field">
+                                    <input type="checkbox" name="is_org_admin" value="1" <?= (int)$u['is_org_admin'] === 1 ? 'checked' : '' ?>>
+                                    <span>Organisation admin</span>
+                                </label>
+                                <button type="submit" class="btn btn-sm btn-secondary">Save</button>
+                            </form>
+                        </div>
+                        <?php endif; ?>
+
                         <div class="user-manage-group">
                             <h3>Access</h3>
                             <div class="actions-cell">

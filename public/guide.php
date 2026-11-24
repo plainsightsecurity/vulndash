@@ -49,7 +49,9 @@ $sections = [
     'reports'         => ['Reports', true, false],
     'account'         => ['Your account', true, false],
     'glossary'        => ['Glossary', true, false],
+    'org-admin'       => ['My organisation', !$isAdmin && !empty($_SESSION['is_org_admin']), false],
     'admin-users'     => ['Manage Users', $isAdmin, true],
+    'admin-orgs'      => ['Organisations', $isAdmin, true],
     'admin-audit'     => ['Audit Log', $isAdmin, true],
     'admin-api'       => ['API Usage', $isAdmin, true],
 ];
@@ -462,6 +464,36 @@ require __DIR__ . '/../src/views/header.php';
     </ul>
     <h3>Tags</h3>
     <p>Tags come from Qualys. Add a tag with its name and Qualys identifier, or leave the identifier blank to create a <em>pending</em> tag to fill in later. Set a tag's <strong>Agent activation ID</strong> to give users with that tag the <strong>Install agent</strong> button on the Assets page, pre-filled with that ID.</p>
+</section>
+<?php endif; ?>
+
+<?php if ($show['org-admin']): ?>
+<!-- ================================================================== -->
+<section class="guide-section" id="org-admin">
+    <h2>My organisation</h2>
+    <p>Account menu &rarr; <strong>My organisation</strong>. As your organisation's admin you can:</p>
+    <ul>
+        <li><strong>Invite someone</strong> - enter their username and email. They're emailed a link to set their password (valid for 7 days) and see the same systems as everyone else in your organisation.</li>
+        <li><strong>Deactivate</strong> someone who has left - they're signed out straight away and can't sign in. <strong>Reactivate</strong> brings them back.</li>
+        <li><strong>Send password link</strong> - for someone who lost their invitation or forgot their password. It goes to the email address already on their account.</li>
+    </ul>
+    <p>Your organisation has a limit on how many active users it can have, shown at the top of the page. Deactivated people don't count towards it. To raise the limit, change which systems your organisation sees, or change another organisation admin's account, contact Plainsight.</p>
+</section>
+<?php endif; ?>
+
+<?php if ($show['admin-orgs']): ?>
+<!-- ================================================================== -->
+<section class="guide-section" id="admin-orgs">
+    <h2>Organisations <span class="badge badge-accent guide-admin-badge">Admin</span></h2>
+    <p>Account menu &rarr; <strong>Organisations</strong>. An organisation groups a client's accounts and the tags they all see: every member sees the organisation's tags, plus any <em>extra tags</em> set on them individually in Manage Users. Change the organisation's tags and everyone's access changes on their next click.</p>
+    <ul>
+        <li><strong>User limit</strong> - the most <em>active</em> accounts the organisation can have. It stops its organisation admins inviting or reactivating past it; you can still go over it yourself. Leave blank for no limit.</li>
+        <li><strong>Suspend</strong> - every member is signed out, can't sign in and gets no emails until you reactivate it.</li>
+        <li><strong>Delete</strong> - members stay, without an organisation, keeping only their own extra tags.</li>
+        <li><strong>Members</strong> - opens Manage Users filtered to that organisation.</li>
+    </ul>
+    <p>Put people in an organisation from their <strong>Manage</strong> panel on Manage Users, where you can also make them its <strong>organisation admin</strong>. Organisation admins get a <em>My organisation</em> page where they can invite people (within the limit), deactivate and reactivate them, and send password links - nothing else: no tags, roles, emails or other organisations.</p>
+    <p>To add many people at once, use <strong>Import from CSV</strong> on Manage Users. Columns: <code>username</code>, <code>email</code> (required), <code>organisation</code>, <code>tags</code> (separated by <code>;</code>) and <code>org_admin</code> (yes/no). Every row is checked first; if any has a problem, nothing is created and each problem is listed.</p>
 </section>
 <?php endif; ?>
 
