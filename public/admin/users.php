@@ -70,6 +70,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($username === '' || $email === '') {
                     throw new \RuntimeException('Username and email are both required.');
                 }
+                if (($emailError = Helpers::emailError($email)) !== null) {
+                    throw new \RuntimeException($emailError . ' The account was not created.');
+                }
                 if (!$isAdmin && empty($tagIds)) {
                     throw new \RuntimeException('Assign at least one tag, or make this an admin account - otherwise the account will see no data at all.');
                 }
@@ -104,6 +107,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'before' => $tagsBefore, 'after' => $tagNamesFor($tagIds),
                 ]]);
                 Helpers::setFlash('Tag assignments updated.');
+                break;
+
+            case 'update_email':
+                $userId = (int)($_POST['user_id'] ?? 0);
+                $email  = trim((string)($_POST['email'] ?? ''));
+                $user   = UserRepository::getUser($userId);
+                if (!$user) {
+                    throw new \RuntimeException('That account no longer exists.');
+                }
+                if (($emailError = Helpers::emailError($email)) !== null) {
+                    throw new \RuntimeException($emailError);
+                }
+                if ($email === $user['email']) {
+                    Helpers::setFlash("No change - {$user['username']}'s email is already {$email}.");
+                    break;
+                }
+                UserRepository::updateEmail($userId, $email);
+                AuditLog::record('admin.user_email_changed', $auditTarget($userId) + ['details' => [
+                    'before' => $user['email'], 'after' => $email,
+                ]]);
+
+                if (empty($_POST['send_link'])) {
+                    Helpers::setFlash("Email for '{$user['username']}' changed to {$email}.");
+                    break;
+                }
+                // An account that has never signed in is still waiting on its
+                // setup email (typically why the address is being corrected),
+                // so it gets the 7-day setup link; otherwise a 1-hour reset.
+                $purpose = $user['last_login_at'] === null
+                    ? PasswordResetRepository::PURPOSE_SETUP
+                    : PasswordResetRepository::PURPOSE_RESET;
+                if (sendPasswordLink($userId, $email, $user['username'], $purpose)) {
+                    AuditLog::record('admin.password_reset_sent', $auditTarget($userId) + ['details' => ['email' => $email]]);
+                    Helpers::setFlash(
+                        "Email for '{$user['username']}' changed to {$email}, and a "
+                        . ($purpose === PasswordResetRepository::PURPOSE_SETUP ? 'password setup' : 'password reset')
+                        . ' link has been sent to it.'
+                    );
+                } else {
+                    Helpers::setFlash(
+                        "Email for '{$user['username']}' changed to {$email}, but the password link could not be sent - "
+                        . "check the server error log, then use \"Email reset link\" to retry.",
+                        'error'
+                    );
+                }
                 break;
 
             case 'toggle_admin':
@@ -403,7 +451,7 @@ require __DIR__ . '/../../src/views/header.php';
             </label>
             <label class="field">
                 <span>Email</span>
-                <input type="email" name="email" required>
+                <input type="email" name="email" required pattern="<?= Helpers::e(Helpers::EMAIL_INPUT_PATTERN) ?>" title="A full email address, e.g. name@company.co.uk">
             </label>
         </div>
         <p class="checkbox-hint" style="margin: 0.4rem 0 0;">
@@ -495,6 +543,25 @@ require __DIR__ . '/../../src/views/header.php';
             <tr class="user-manage-row" id="manage-<?= (int)$u['id'] ?>" hidden>
                 <td colspan="7">
                     <div class="user-manage">
+                        <div class="user-manage-group">
+                            <h3>Email</h3>
+                            <form method="post" class="user-manage-email">
+                                <input type="hidden" name="action" value="update_email">
+                                <input type="hidden" name="user_id" value="<?= (int)$u['id'] ?>">
+                                <input type="hidden" name="csrf_token" value="<?= Helpers::e($csrfToken) ?>">
+                                <div class="inline-form-row">
+                                    <input type="email" name="email" value="<?= Helpers::e($u['email']) ?>" required
+                                        pattern="<?= Helpers::e(Helpers::EMAIL_INPUT_PATTERN) ?>" title="A full email address, e.g. name@company.co.uk"
+                                        aria-label="Email address for <?= Helpers::e($u['username']) ?>">
+                                    <button type="submit" class="btn btn-sm btn-secondary">Save email</button>
+                                </div>
+                                <label class="checkbox-field">
+                                    <input type="checkbox" name="send_link" value="1"<?= $u['last_login_at'] === null ? ' checked' : '' ?>>
+                                    <span>Email a password link to the new address <span class="checkbox-hint">(<?= $u['last_login_at'] === null ? 'setup link, 7 days - not signed in yet' : 'reset link, 1 hour' ?>)</span></span>
+                                </label>
+                            </form>
+                        </div>
+
                         <?php if ((int)$u['id'] !== $currentUserId): ?>
                         <div class="user-manage-group">
                             <h3>Access</h3>

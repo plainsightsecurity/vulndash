@@ -41,6 +41,7 @@ class AuditLog
         'account.notifications_changed' => 'Changed email notifications',
         'admin.user_created'           => 'Created account',
         'admin.user_tags_changed'      => 'Changed account tags',
+        'admin.user_email_changed'     => 'Changed account email',
         'admin.user_admin_changed'     => 'Changed admin status',
         'admin.user_uninstall_changed' => 'Changed agent-uninstall permission',
         'admin.user_active_changed'    => 'Activated / deactivated account',

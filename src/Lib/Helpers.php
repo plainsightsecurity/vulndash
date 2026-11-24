@@ -28,6 +28,44 @@ class Helpers
         return htmlspecialchars($value ?? '', ENT_QUOTES, 'UTF-8');
     }
 
+    /**
+     * Pattern for the HTML pattern attribute on email inputs - the browser-side
+     * twin of emailError()'s domain-ending check, so a typo like ".co.u" is
+     * flagged before the form is even submitted. (The pattern attribute is
+     * implicitly anchored at both ends.)
+     */
+    public const EMAIL_INPUT_PATTERN = '[^@\\s]+@[^@\\s]+\\.([A-Za-z]{2,}|[Xx][Nn]--[A-Za-z0-9\\-]+)';
+
+    /**
+     * Checks an email address before it's saved on an account. Returns null
+     * if it's fine, or a message to show the admin if not.
+     *
+     * FILTER_VALIDATE_EMAIL alone accepts typos like "someone@company.co.u"
+     * (it doesn't care what the domain ends in), and Resend then rejects the
+     * send with a 422 - which surfaced only as a failed setup email after the
+     * account had already been created. So on top of that, the domain must
+     * have at least one dot and end in a real-looking top-level domain: two
+     * or more letters, or a punycode "xn--" label for internationalised TLDs.
+     */
+    public static function emailError(string $email): ?string
+    {
+        if ($email === '') {
+            return 'An email address is required.';
+        }
+        if (filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+            return "\"{$email}\" isn't a valid email address.";
+        }
+        $domain = substr($email, strrpos($email, '@') + 1);
+        if (!str_contains($domain, '.')) {
+            return "\"{$email}\" is missing the end of its domain (for example .co.uk or .com) - check for a typo.";
+        }
+        $tld = substr($domain, strrpos($domain, '.') + 1);
+        if (!preg_match('/^(?:[a-z]{2,}|xn--[a-z0-9-]+)$/i', $tld)) {
+            return "\"{$email}\" ends in \".{$tld}\", which isn't a valid domain ending - check for a typo.";
+        }
+        return null;
+    }
+
     public static function severityLabel(int $level): string
     {
         return self::SEVERITY_LABELS[$level] ?? 'Unknown';

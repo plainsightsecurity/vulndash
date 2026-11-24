@@ -444,7 +444,7 @@ require __DIR__ . '/../src/views/header.php';
     <h2>Manage Users <span class="badge badge-accent guide-admin-badge">Admin</span></h2>
     <p>Account menu &rarr; <strong>Manage Users</strong>.</p>
     <h3>Adding a user</h3>
-    <p>Enter a username and email address, then tick the tags the account may see. The new user is emailed a link to set their own password. Two options:</p>
+    <p>Enter a username and email address, then tick the tags the account may see. Addresses with an incomplete domain ending, such as <code>.co.u</code>, are rejected so a typo can't stop the email going out. The new user is emailed a link to set their own password. Two options:</p>
     <ul>
         <li><strong>Admin account</strong> - sees everything, ignores tag scope, and gets these admin tools.</li>
         <li><strong>Can uninstall agents</strong> - lets a client account queue agent uninstalls from the Assets page. Admins always can.</li>
@@ -453,6 +453,7 @@ require __DIR__ . '/../src/views/header.php';
     <h3>Managing an existing user</h3>
     <p>Press <strong>Manage</strong> on a user's row to open their actions:</p>
     <ul>
+        <li><strong>Email</strong> - correct their email address. Tick the box to send a password link to the new address at the same time: a setup link if they've never signed in, otherwise a reset link.</li>
         <li><strong>Access</strong> - edit tags, make or remove admin, grant or revoke agent uninstall.</li>
         <li><strong>Password</strong> - <strong>Email reset link</strong> so they choose their own, or set one for them (12+ characters).</li>
         <li><strong>MFA</strong> - <strong>Reset MFA</strong> if they've lost their authenticator, and revoke their trusted devices one at a time or all at once.</li>

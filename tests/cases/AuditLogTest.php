@@ -51,7 +51,7 @@ test('repeated failures record the lockout', function () {
 
 test('admin user changes are recorded through the real page', function () {
     seed_estate();
-    $out = render_page('admin/users.php', '', 'admin', 'action=create_user&username=newbie&email=newbie@test&tag_ids[]=2');
+    $out = render_page('admin/users.php', '', 'admin', 'action=create_user&username=newbie&email=newbie@example.test&tag_ids[]=2');
     ok(!str_contains($out, 'PHPERR'), 'no PHP errors: ' . $out);
     $newId = (int)Database::getConnection()->query("SELECT id FROM users WHERE username = 'newbie'")->fetchColumn();
     render_page('admin/users.php', '', 'admin', "action=update_tags&user_id=$newId&tag_ids[]=1&tag_ids[]=2");

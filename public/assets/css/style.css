@@ -1722,6 +1722,8 @@ body.chart-fullscreen-open { overflow: hidden; }
 }
 .user-manage-password { margin-top: 0.4rem; gap: 0.4rem; align-items: center; }
 .user-manage-password input { width: 14rem; }
+.user-manage-email .inline-form-row { gap: 0.4rem; align-items: center; margin-bottom: 0.35rem; }
+.user-manage-email input[type="email"] { width: 18rem; max-width: 100%; }
 .user-manage-devices { margin: 0 0 0.5rem; padding-left: 1.1rem; font-size: 0.8rem; }
 .user-manage-devices li { margin-bottom: 0.3rem; }
 

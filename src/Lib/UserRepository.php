@@ -43,7 +43,7 @@ class UserRepository
     {
         $pdo = Database::getConnection();
         $stmt = $pdo->prepare(
-            'SELECT id, username, email, is_admin, is_active, mfa_enabled, mfa_confirmed_at
+            'SELECT id, username, email, is_admin, is_active, mfa_enabled, mfa_confirmed_at, last_login_at
              FROM users WHERE id = :id'
         );
         $stmt->execute(['id' => $id]);
@@ -370,6 +370,31 @@ class UserRepository
             $pdo->rollBack();
             if ((int)$e->getCode() === 23000 || str_contains($e->getMessage(), 'Duplicate entry')) {
                 throw new \RuntimeException('That username or email is already in use.');
+            }
+            throw $e;
+        }
+    }
+
+    /**
+     * Changes an account's email address (admin Manage Users). Validation of
+     * the address itself is the caller's job (Helpers::emailError()); this
+     * only enforces uniqueness, the same way createUser() does.
+     *
+     * Outstanding password setup/reset links are left alone: they're bound
+     * to the account, not the address, and anyone holding one already had
+     * it emailed to them.
+     *
+     * @throws \RuntimeException if another account already uses the address
+     */
+    public static function updateEmail(int $userId, string $email): void
+    {
+        try {
+            Database::getConnection()
+                ->prepare('UPDATE users SET email = :email WHERE id = :id')
+                ->execute(['email' => $email, 'id' => $userId]);
+        } catch (\PDOException $e) {
+            if ((int)$e->getCode() === 23000 || str_contains($e->getMessage(), 'Duplicate entry')) {
+                throw new \RuntimeException('That email address is already used by another account.');
             }
             throw $e;
         }
