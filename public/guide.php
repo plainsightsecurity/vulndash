@@ -451,6 +451,7 @@ require __DIR__ . '/../src/views/header.php';
     </ul>
     <p>A client account sees nothing until it has at least one tag.</p>
     <h3>Managing an existing user</h3>
+    <p>To find someone, type part of their username or email in the <strong>Search</strong> box above the Users table, or pick a <strong>Tag</strong> to list only the accounts that carry it (<em>No tags</em> lists client accounts that would see nothing). The two combine, and the list stays filtered after you make a change.</p>
     <p>Press <strong>Manage</strong> on a user's row to open their actions:</p>
     <ul>
         <li><strong>Email</strong> - correct their email address. Tick the box to send a password link to the new address at the same time: a setup link if they've never signed in, otherwise a reset link.</li>

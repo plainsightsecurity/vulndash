@@ -36,10 +36,38 @@ Auth::requireAdmin();
 
 $currentUserId = (int)($_SESSION['user_id'] ?? 0);
 
+/**
+ * The Users list filter (search + tag) from a query array - $_GET, or the
+ * query string of the page an action was posted from. Unknown keys and
+ * malformed values are dropped, so the result is safe to rebuild a URL from.
+ *
+ * @return array{q?: string, tag?: string}
+ */
+function userListFilter(array $query): array
+{
+    $filter = [];
+    $q = trim((string)($query['q'] ?? ''));
+    if ($q !== '') {
+        $filter['q'] = mb_substr($q, 0, 100);
+    }
+    $tag = (string)($query['tag'] ?? '');
+    if ($tag === UserRepository::TAG_FILTER_NONE || ctype_digit($tag)) {
+        $filter['tag'] = $tag;
+    }
+    return $filter;
+}
+
+// Every action posts back here and then redirects; keep the admin on the
+// filtered list they acted from rather than dropping them back on everyone.
+$refererQuery = [];
+parse_str((string)parse_url((string)($_SERVER['HTTP_REFERER'] ?? ''), PHP_URL_QUERY), $refererQuery);
+$keptFilter = userListFilter($refererQuery);
+$usersUrl = '/admin/users' . ($keptFilter !== [] ? '?' . http_build_query($keptFilter) : '');
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!Helpers::verifyCsrf($_POST['csrf_token'] ?? null)) {
         Helpers::setFlash('Your session expired - please try that again.', 'error');
-        header('Location: /admin/users');
+        header('Location: ' . $usersUrl);
         exit;
     }
 
@@ -326,11 +354,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         Helpers::setFlash($e->getMessage(), 'error');
     }
 
-    header('Location: /admin/users');
+    header('Location: ' . $usersUrl);
     exit;
 }
 
-$users = UserRepository::listUsers();
+$userFilter = userListFilter($_GET);
+$filterTag = isset($userFilter['tag'])
+    ? ($userFilter['tag'] === UserRepository::TAG_FILTER_NONE ? UserRepository::TAG_FILTER_NONE : (int)$userFilter['tag'])
+    : null;
+$users = UserRepository::listUsers($userFilter['q'] ?? null, $filterTag);
+$totalUsers = $userFilter !== [] ? UserRepository::countUsers() : count($users);
 $tags  = UserRepository::listTags();
 
 // One extra query for every MFA-enabled account's trusted devices, rather
@@ -481,8 +514,35 @@ require __DIR__ . '/../../src/views/header.php';
     </form>
 </div>
 
-<div class="panel">
-    <h2>Users</h2>
+<div class="panel" id="users">
+    <h2>Users <span class="checkbox-hint"><?= $userFilter !== [] ? count($users) . ' of ' . $totalUsers . ' shown' : $totalUsers . ' total' ?></span></h2>
+
+    <form method="get" action="/admin/users#users" class="filter-bar user-filter-bar">
+        <label class="field field-inline">
+            <span>Search</span>
+            <span class="search-input-wrap">
+                <input type="text" name="q" class="search-debounce-input" value="<?= Helpers::e($userFilter['q'] ?? '') ?>" placeholder="Username or email…" autocomplete="off">
+                <button type="button" class="search-clear" aria-label="Clear search" title="Clear search" <?= empty($userFilter['q']) ? 'hidden' : '' ?>>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </span>
+        </label>
+        <label class="field field-inline">
+            <span>Tag</span>
+            <select name="tag" onchange="this.form.submit();">
+                <option value="">Any tag</option>
+                <option value="<?= UserRepository::TAG_FILTER_NONE ?>" <?= $filterTag === UserRepository::TAG_FILTER_NONE ? 'selected' : '' ?>>No tags</option>
+                <?php foreach ($tags as $tag): ?>
+                <option value="<?= (int)$tag['id'] ?>" <?= $filterTag === (int)$tag['id'] ? 'selected' : '' ?>><?= Helpers::e($tag['name']) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </label>
+        <?php if ($userFilter !== []): ?>
+        <a class="btn btn-secondary btn-sm" href="/admin/users#users">Clear filters</a>
+        <?php endif; ?>
+        <noscript><button type="submit" class="btn btn-secondary">Apply</button></noscript>
+    </form>
+
     <div class="table-wrap">
     <table class="vuln-table admin-table">
         <thead>
@@ -498,7 +558,7 @@ require __DIR__ . '/../../src/views/header.php';
         </thead>
         <tbody>
             <?php if (empty($users)): ?>
-            <tr class="empty-row"><td colspan="7">No users yet.</td></tr>
+            <tr class="empty-row"><td colspan="7"><?= $userFilter !== [] ? 'No users match these filters.' : 'No users yet.' ?></td></tr>
             <?php else: foreach ($users as $u):
                 $userMfaEnabled = (bool)$u['mfa_enabled'];
                 $userDevices = $trustedDevicesByUser[(int)$u['id']] ?? [];

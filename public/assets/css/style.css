@@ -989,6 +989,9 @@ body.chart-fullscreen-open { overflow: hidden; }
     margin: 0;
 }
 
+/* Manage Users: search + tag filter sits inside the Users panel, so no second box. */
+.user-filter-bar { padding: 0; border: 0; background: none; margin-bottom: 1rem; }
+
 .filter-bar {
     display: flex;
     align-items: flex-end;

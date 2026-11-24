@@ -22,10 +22,38 @@ class UserRepository
      *
      * @return array<int, array<string, mixed>>
      */
-    public static function listUsers(): array
+    /** Filter value for listUsers()'s $tagFilter: accounts with no tags at all. */
+    public const TAG_FILTER_NONE = 'none';
+
+    /**
+     * Every account, or (admin Manage Users filter, 2026-11) only those
+     * matching $search - a case-insensitive substring of the username or
+     * email - and/or carrying the tag $tagFilter (a tag id, or
+     * TAG_FILTER_NONE for accounts with no tags). The tag filter is an
+     * EXISTS rather than a WHERE on the join, so a matching account still
+     * shows ALL its tags in tag_names, not just the one filtered on.
+     *
+     * @param int|string|null $tagFilter
+     */
+    public static function listUsers(?string $search = null, int|string|null $tagFilter = null): array
     {
-        $pdo = Database::getConnection();
-        $stmt = $pdo->query("
+        $where = [];
+        $params = [];
+        if ($search !== null && $search !== '') {
+            // Named placeholders can't repeat with emulated prepares off.
+            $like = '%' . addcslashes($search, '%_\\') . '%';
+            $where[] = '(u.username LIKE :q_username OR u.email LIKE :q_email)';
+            $params['q_username'] = $like;
+            $params['q_email'] = $like;
+        }
+        if ($tagFilter === self::TAG_FILTER_NONE) {
+            $where[] = 'NOT EXISTS (SELECT 1 FROM user_tags fut WHERE fut.user_id = u.id)';
+        } elseif (is_int($tagFilter)) {
+            $where[] = 'EXISTS (SELECT 1 FROM user_tags fut WHERE fut.user_id = u.id AND fut.tag_id = :tag_id)';
+            $params['tag_id'] = $tagFilter;
+        }
+
+        $stmt = Database::getConnection()->prepare("
             SELECT u.id, u.username, u.email, u.is_admin, u.can_uninstall_agents, u.is_active, u.mfa_enabled, u.last_login_at,
                    GROUP_CONCAT(t.name ORDER BY t.name SEPARATOR ', ') AS tag_names,
                    (SELECT COUNT(*) FROM user_trusted_devices td
@@ -33,10 +61,17 @@ class UserRepository
             FROM users u
             LEFT JOIN user_tags ut ON ut.user_id = u.id
             LEFT JOIN tags t ON t.id = ut.tag_id
+            " . ($where !== [] ? 'WHERE ' . implode(' AND ', $where) : '') . "
             GROUP BY u.id
             ORDER BY u.username
         ");
+        $stmt->execute($params);
         return $stmt->fetchAll();
+    }
+
+    public static function countUsers(): int
+    {
+        return (int)Database::getConnection()->query('SELECT COUNT(*) FROM users')->fetchColumn();
     }
 
     public static function getUser(int $id): ?array
