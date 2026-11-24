@@ -31,6 +31,7 @@ $cases = [
     ['admin',  'trends.php',             '',                  'html',  [], []],
     ['admin',  'top_fixes.php',          '',                  'html',  ['Fixing the top 4', 'Critical remote code execution', 'title="97.00% chance of exploitation', 'title="0.03% chance of exploitation'], []],
     ['admin',  'top_fixes.php',          'view_tag=2&limit=50', 'html', ['High severity flaw'], ['Critical remote code execution']],
+    ['admin',  'top_fixes.php',          '',                  'html',  ['<option value="10" selected>Top 10</option>', '<option value="25" >Top 25</option>'], []],
     ['admin',  'search.php',             'q=host',            'html',  [], []],
     ['admin',  'ce_readiness.php',       '',                  'html',  [], []],
     ['admin',  'preferences.php',        '',                  'html',  [], []],

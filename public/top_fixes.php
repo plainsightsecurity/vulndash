@@ -28,8 +28,8 @@ $viewTagId       = Helpers::resolveViewTag($availableTagIds);
 // points here are the same ones the gauge is showing right now.
 $showHidden = !empty($_SESSION['show_hidden']);
 
-$limitOptions = [25, 50, 100];
-$limit = isset($_GET['limit']) && in_array((int)$_GET['limit'], $limitOptions, true) ? (int)$_GET['limit'] : 25;
+$limitOptions = [10, 25, 50, 100];
+$limit = isset($_GET['limit']) && in_array((int)$_GET['limit'], $limitOptions, true) ? (int)$_GET['limit'] : 10;
 
 $risk  = VulnerabilityRepository::getRiskScore($tagIds, $isAdmin, $viewTagId, $showHidden, $userId);
 $fixes = VulnerabilityRepository::getTopFixes($tagIds, $isAdmin, $viewTagId, $userId, $limit, $showHidden);
