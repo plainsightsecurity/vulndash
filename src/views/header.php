@@ -138,4 +138,4 @@ $appName = Config::get('app.name') ?? 'Vulnerability Management Dashboard';
         <?php endif; ?>
     </div>
 </header>
-<main class="site-main">
+<main class="site-main<?= !empty($wideLayout) ? ' site-main-wide' : '' ?>">

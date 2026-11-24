@@ -517,6 +517,8 @@ $renderTagCombo = static function (array $tagGroup, string $heading, array $chec
 };
 
 $pageTitle = 'Manage Users';
+// The Users table has eight columns - give it the room so it doesn't scroll.
+$wideLayout = true;
 require __DIR__ . '/../../src/views/header.php';
 ?>
 
@@ -757,21 +759,20 @@ bjones,bob.jones@wavehill.co.uk,Wavehill Ltd,Wavehill-DMZ,no</pre>
                 ?></td>
                 <td>
                     <div class="actions-cell actions-nowrap">
-                        <a class="btn btn-sm btn-secondary" href="/admin/users?edit=<?= (int)$u['id'] ?>">Edit tags</a>
                         <button type="button" class="btn btn-sm btn-secondary manage-toggle" data-manage-toggle aria-expanded="false" aria-controls="manage-<?= (int)$u['id'] ?>">Manage <span class="manage-caret" aria-hidden="true">&#9662;</span></button>
                     </div>
                 </td>
             </tr>
             <tr class="user-manage-row" id="manage-<?= (int)$u['id'] ?>" hidden>
-                <td colspan="7">
+                <td colspan="8">
                     <div class="user-manage">
-                        <div class="user-manage-group">
+                        <div class="user-manage-group user-manage-group-wide">
                             <h3>Email</h3>
                             <form method="post" class="user-manage-email">
                                 <input type="hidden" name="action" value="update_email">
                                 <input type="hidden" name="user_id" value="<?= (int)$u['id'] ?>">
                                 <input type="hidden" name="csrf_token" value="<?= Helpers::e($csrfToken) ?>">
-                                <div class="inline-form-row">
+                                <div class="user-manage-inline">
                                     <input type="email" name="email" value="<?= Helpers::e($u['email']) ?>" required
                                         pattern="<?= Helpers::e(Helpers::EMAIL_INPUT_PATTERN) ?>" title="A full email address, e.g. name@company.co.uk"
                                         aria-label="Email address for <?= Helpers::e($u['username']) ?>">
@@ -788,7 +789,7 @@ bjones,bob.jones@wavehill.co.uk,Wavehill Ltd,Wavehill-DMZ,no</pre>
                         <?php if (!$u['is_admin'] && $organisations !== []): ?>
                         <div class="user-manage-group">
                             <h3>Organisation</h3>
-                            <form method="post" class="inline-form-row" style="align-items: center;">
+                            <form method="post" class="user-manage-stack">
                                 <input type="hidden" name="action" value="set_organisation">
                                 <input type="hidden" name="user_id" value="<?= (int)$u['id'] ?>">
                                 <input type="hidden" name="csrf_token" value="<?= Helpers::e($csrfToken) ?>">
@@ -798,11 +799,13 @@ bjones,bob.jones@wavehill.co.uk,Wavehill Ltd,Wavehill-DMZ,no</pre>
                                     <option value="<?= $o['id'] ?>" <?= (int)$u['organisation_id'] === $o['id'] ? 'selected' : '' ?>><?= Helpers::e($o['name']) ?></option>
                                     <?php endforeach; ?>
                                 </select>
-                                <label class="checkbox-field">
-                                    <input type="checkbox" name="is_org_admin" value="1" <?= (int)$u['is_org_admin'] === 1 ? 'checked' : '' ?>>
-                                    <span>Organisation admin</span>
-                                </label>
-                                <button type="submit" class="btn btn-sm btn-secondary">Save</button>
+                                <div class="user-manage-inline">
+                                    <label class="checkbox-field">
+                                        <input type="checkbox" name="is_org_admin" value="1" <?= (int)$u['is_org_admin'] === 1 ? 'checked' : '' ?>>
+                                        <span>Organisation admin</span>
+                                    </label>
+                                    <button type="submit" class="btn btn-sm btn-secondary">Save</button>
+                                </div>
                             </form>
                         </div>
                         <?php endif; ?>
@@ -810,6 +813,9 @@ bjones,bob.jones@wavehill.co.uk,Wavehill Ltd,Wavehill-DMZ,no</pre>
                         <div class="user-manage-group">
                             <h3>Access</h3>
                             <div class="actions-cell">
+                                <?php if (!$u['is_admin']): ?>
+                                <a class="btn btn-sm btn-secondary" href="/admin/users?edit=<?= (int)$u['id'] ?>">Edit extra tags</a>
+                                <?php endif; ?>
                                 <form method="post" onsubmit="return confirm(<?= Helpers::jsAttr('Toggle admin status for ' . $u['username'] . '?') ?>);">
                                     <input type="hidden" name="action" value="toggle_admin">
                                     <input type="hidden" name="user_id" value="<?= (int)$u['id'] ?>">
@@ -839,7 +845,7 @@ bjones,bob.jones@wavehill.co.uk,Wavehill Ltd,Wavehill-DMZ,no</pre>
                                     <button type="submit" class="btn btn-sm btn-secondary">Email reset link</button>
                                 </form>
                             </div>
-                            <form method="post" class="inline-form-row user-manage-password">
+                            <form method="post" class="user-manage-inline">
                                 <input type="hidden" name="action" value="reset_password">
                                 <input type="hidden" name="user_id" value="<?= (int)$u['id'] ?>">
                                 <input type="hidden" name="csrf_token" value="<?= Helpers::e($csrfToken) ?>">
@@ -893,7 +899,7 @@ bjones,bob.jones@wavehill.co.uk,Wavehill Ltd,Wavehill-DMZ,no</pre>
                         <?php endif; ?>
 
                         <?php if ((int)$u['id'] !== $currentUserId): ?>
-                        <div class="user-manage-group">
+                        <div class="user-manage-group user-manage-group-danger">
                             <h3>Account</h3>
                             <div class="actions-cell">
                                 <form method="post" onsubmit="return confirm(<?= Helpers::jsAttr(($u['is_active'] ? 'Deactivate ' : 'Reactivate ') . $u['username'] . '?') ?>);">
