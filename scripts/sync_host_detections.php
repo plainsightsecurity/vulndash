@@ -99,7 +99,7 @@ declare(strict_types=1);
  * installed agent - one with a clean first scan, or one that hasn't
  * processed a scan at all yet - used to wait for the reconcile job's full
  * Host List pull, up to 6 hours. Each run now also makes that same full,
- * unfiltered Host List pull (same API version as the detection pull above)
+ * unfiltered Host List pull (on its own version rotation - see below)
  * and adds any host it returns that isn't stored locally yet (asset row
  * and tags only, via HostSyncWriter::upsertAssetAndTags()). It is
  * deliberately NOT date-filtered: an agent with no processed scan has no
@@ -152,6 +152,17 @@ declare(strict_types=1);
  * Recorded in sync_state 'host_list_pass'. The 6-hourly reconcile's own
  * full pulls are unaffected.
  *
+ * Host List version rotation (2026-11-24): the pass used to reuse whichever
+ * version the detection pull was assigned. With the pass on every other run
+ * (60-minute interval, 30-minute sync) and four versions in the detection
+ * rotation, that always landed it on the same two versions - every Host
+ * List call went to /api/2.0/ and /api/4.0/ (12 a day each) while 3.0 and
+ * 5.0 sat idle. It now rotates through qualys.host_detection_api_versions
+ * on its own counter (sync_state 'host_list_rr'), advanced each time the
+ * pass runs whether or not it succeeds, so the calls spread evenly (about
+ * 6 a day per version with four versions). No fallback version: a failed
+ * pull fails the run and the next pass simply moves on to the next version.
+ *
  * Round-robins across API versions (qualys.host_detection_api_versions -
  * a separate config key from KB sync's qualys.kb_api_versions, since
  * there's no reason the two endpoints' available versions have to move
@@ -188,8 +199,8 @@ declare(strict_types=1);
  * idempotent) but does mean a failed-then-recovered run costs more
  * redundant work than KB sync's equivalent would - acceptable for how
  * rarely this should actually trigger, not something to over-engineer
- * around pre-emptively. The new-host pass uses whichever version the
- * detection pull ended up on, with no fallback of its own.
+ * around pre-emptively. The new-host pass has its own version rotation
+ * ('host_list_rr', see above), with no fallback of its own.
  */
 
 require_once __DIR__ . '/../src/bootstrap.php';
@@ -414,7 +425,25 @@ try {
         $listed = 0;
         $listedHostIds = [];
         $assetIdsFilled = 0;
-        foreach ($servedBy->fetchHostList() as $host) {
+        // The Host List pass keeps its own place in the version rotation
+        // ('host_list_rr') rather than borrowing the detection pull's - see
+        // "Host List version rotation" in this file's docblock.
+        $hlRrStmt = $pdo->prepare('SELECT state_json FROM sync_state WHERE sync_type = :type');
+        $hlRrStmt->execute(['type' => 'host_list_rr']);
+        $hlRrState = json_decode((string)$hlRrStmt->fetchColumn(), true);
+        $hlRrIndex = is_array($hlRrState) ? max(0, (int)($hlRrState['index'] ?? 0)) : 0;
+        $hostListVersion = $versions[$hlRrIndex % count($versions)];
+        $hostListClient = $clientPool[$hostListVersion];
+        $pdo->prepare('
+            INSERT INTO sync_state (sync_type, state_json) VALUES (:type, :state)
+            ON DUPLICATE KEY UPDATE state_json = VALUES(state_json)
+        ')->execute([
+            'type'  => 'host_list_rr',
+            'state' => json_encode(['index' => $hlRrIndex + 1]),
+        ]);
+        fwrite(STDOUT, "New-host pass (Host List): using /api/{$hostListVersion}/\n");
+
+        foreach ($hostListClient->fetchHostList() as $host) {
             $listed++;
             $hostId = (int)$host['id'];
             $listedHostIds[$hostId] = true;
