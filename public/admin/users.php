@@ -41,7 +41,9 @@ $currentUserId = (int)($_SESSION['user_id'] ?? 0);
  * query string of the page an action was posted from. Unknown keys and
  * malformed values are dropped, so the result is safe to rebuild a URL from.
  *
- * @return array{q?: string, tag?: string}
+ * Sort column/direction ride along too, so an action keeps the order as well.
+ *
+ * @return array{q?: string, tag?: string, sort?: string, dir?: string}
  */
 function userListFilter(array $query): array
 {
@@ -53,6 +55,11 @@ function userListFilter(array $query): array
     $tag = (string)($query['tag'] ?? '');
     if ($tag === UserRepository::TAG_FILTER_NONE || ctype_digit($tag)) {
         $filter['tag'] = $tag;
+    }
+    $sort = (string)($query['sort'] ?? '');
+    if (isset(UserRepository::USER_SORT_COLUMNS[$sort])) {
+        $filter['sort'] = $sort;
+        $filter['dir'] = strtolower((string)($query['dir'] ?? '')) === 'desc' ? 'desc' : 'asc';
     }
     return $filter;
 }
@@ -362,8 +369,11 @@ $userFilter = userListFilter($_GET);
 $filterTag = isset($userFilter['tag'])
     ? ($userFilter['tag'] === UserRepository::TAG_FILTER_NONE ? UserRepository::TAG_FILTER_NONE : (int)$userFilter['tag'])
     : null;
-$users = UserRepository::listUsers($userFilter['q'] ?? null, $filterTag);
-$totalUsers = $userFilter !== [] ? UserRepository::countUsers() : count($users);
+$userSort = $userFilter['sort'] ?? 'username';
+$userDir  = $userFilter['dir'] ?? 'asc';
+$users = UserRepository::listUsers($userFilter['q'] ?? null, $filterTag, $userSort, $userDir);
+$isFiltered = isset($userFilter['q']) || isset($userFilter['tag']);
+$totalUsers = $isFiltered ? UserRepository::countUsers() : count($users);
 $tags  = UserRepository::listTags();
 
 // One extra query for every MFA-enabled account's trusted devices, rather
@@ -515,7 +525,7 @@ require __DIR__ . '/../../src/views/header.php';
 </div>
 
 <div class="panel" id="users">
-    <h2>Users <span class="checkbox-hint"><?= $userFilter !== [] ? count($users) . ' of ' . $totalUsers . ' shown' : $totalUsers . ' total' ?></span></h2>
+    <h2>Users <span class="checkbox-hint"><?= $isFiltered ? count($users) . ' of ' . $totalUsers . ' shown' : $totalUsers . ' total' ?></span></h2>
 
     <form method="get" action="/admin/users#users" class="filter-bar user-filter-bar">
         <label class="field field-inline">
@@ -537,8 +547,12 @@ require __DIR__ . '/../../src/views/header.php';
                 <?php endforeach; ?>
             </select>
         </label>
-        <?php if ($userFilter !== []): ?>
-        <a class="btn btn-secondary btn-sm" href="/admin/users#users">Clear filters</a>
+        <?php if (isset($userFilter['sort'])): ?>
+        <input type="hidden" name="sort" value="<?= Helpers::e($userSort) ?>">
+        <input type="hidden" name="dir" value="<?= Helpers::e($userDir) ?>">
+        <?php endif; ?>
+        <?php if ($isFiltered): ?>
+        <a class="btn btn-secondary btn-sm" href="<?= Helpers::e('/admin/users' . (isset($userFilter['sort']) ? '?' . http_build_query(['sort' => $userSort, 'dir' => $userDir]) : '') . '#users') ?>">Clear filters</a>
         <?php endif; ?>
         <noscript><button type="submit" class="btn btn-secondary">Apply</button></noscript>
     </form>
@@ -547,18 +561,18 @@ require __DIR__ . '/../../src/views/header.php';
     <table class="vuln-table admin-table">
         <thead>
             <tr>
-                <th>Username</th>
-                <th>Email</th>
-                <th>Role</th>
-                <th>Tags</th>
-                <th>MFA</th>
-                <th>Last login</th>
+                <th><?= Helpers::sortLink('Username', 'username', $userSort, $userDir, '#users') ?></th>
+                <th><?= Helpers::sortLink('Email', 'email', $userSort, $userDir, '#users') ?></th>
+                <th><?= Helpers::sortLink('Role', 'role', $userSort, $userDir, '#users') ?></th>
+                <th><?= Helpers::sortLink('Tags', 'tags', $userSort, $userDir, '#users') ?></th>
+                <th><?= Helpers::sortLink('MFA', 'mfa', $userSort, $userDir, '#users') ?></th>
+                <th><?= Helpers::sortLink('Last login', 'last_login', $userSort, $userDir, '#users') ?></th>
                 <th>Actions</th>
             </tr>
         </thead>
         <tbody>
             <?php if (empty($users)): ?>
-            <tr class="empty-row"><td colspan="7"><?= $userFilter !== [] ? 'No users match these filters.' : 'No users yet.' ?></td></tr>
+            <tr class="empty-row"><td colspan="7"><?= $isFiltered ? 'No users match these filters.' : 'No users yet.' ?></td></tr>
             <?php else: foreach ($users as $u):
                 $userMfaEnabled = (bool)$u['mfa_enabled'];
                 $userDevices = $trustedDevicesByUser[(int)$u['id']] ?? [];

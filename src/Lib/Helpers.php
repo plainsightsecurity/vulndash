@@ -256,7 +256,7 @@ class Helpers
      * calling page) - this function only ever builds a link, the
      * repository's own whitelist is what actually protects the query.
      */
-    public static function sortLink(string $label, string $sortKey, ?string $currentSort, string $currentDir): string
+    public static function sortLink(string $label, string $sortKey, ?string $currentSort, string $currentDir, string $fragment = ''): string
     {
         $nextDir = ($currentSort === $sortKey && $currentDir === 'asc') ? 'desc' : 'asc';
 
@@ -265,7 +265,9 @@ class Helpers
         $query['sort'] = $sortKey;
         $query['dir'] = $nextDir;
 
-        $href = '?' . self::e(http_build_query($query));
+        // $fragment (e.g. '#users') keeps a table that isn't at the top of
+        // its page in view after the reload.
+        $href = '?' . self::e(http_build_query($query) . $fragment);
 
         $indicator = '';
         if ($currentSort === $sortKey) {

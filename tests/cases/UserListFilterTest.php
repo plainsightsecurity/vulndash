@@ -76,3 +76,32 @@ test('the page shows the filter, the match count and only matching rows', functi
     $out = render_page('admin/users.php', 'tag=bogus');
     ok(str_contains($out, '5 total'), 'malformed tag ignored');
 });
+
+test('sorting by each column, both ways, ties on username', function () {
+    seed_more_users();
+    $pdo = Database::getConnection();
+    $pdo->exec("UPDATE users SET last_login_at = '2026-11-01 09:00:00' WHERE id = 4");
+    $pdo->exec("UPDATE users SET last_login_at = '2026-11-20 09:00:00' WHERE id = 2");
+    $pdo->exec('UPDATE users SET mfa_enabled = 1 WHERE id IN (1, 4)');
+
+    eq(usernames(UserRepository::listUsers(null, null, 'username', 'desc')), ['under_score', 'jsmith', 'flennard', 'client', 'admin']);
+    eq(usernames(UserRepository::listUsers(null, null, 'email')), ['admin', 'client', 'flennard', 'jsmith', 'under_score']);
+    eq(usernames(UserRepository::listUsers(null, null, 'role')), ['admin', 'client', 'flennard', 'jsmith', 'under_score'], 'Admin first');
+    eq(usernames(UserRepository::listUsers(null, null, 'role', 'desc')), ['client', 'flennard', 'jsmith', 'under_score', 'admin']);
+    eq(usernames(UserRepository::listUsers(null, null, 'mfa')), ['admin', 'jsmith', 'client', 'flennard', 'under_score'], 'Enabled first');
+    eq(usernames(UserRepository::listUsers(null, null, 'tags')), ['client', 'flennard', 'jsmith', 'admin', 'under_score'], 'no tags last');
+    eq(usernames(UserRepository::listUsers(null, null, 'tags', 'desc')), ['jsmith', 'flennard', 'client', 'admin', 'under_score'], 'no tags still last');
+    eq(usernames(UserRepository::listUsers(null, null, 'last_login', 'desc')), ['client', 'jsmith', 'admin', 'flennard', 'under_score'], 'never signed in last');
+    eq(usernames(UserRepository::listUsers(null, null, 'nonsense; DROP')), ['admin', 'client', 'flennard', 'jsmith', 'under_score'], 'unknown key -> username');
+    eq(usernames(UserRepository::listUsers(null, 2, 'username', 'desc')), ['jsmith', 'flennard'], 'combines with filter');
+});
+
+test('the page renders sort links that keep the filter', function () {
+    seed_more_users();
+    $out = render_page('admin/users.php', 'tag=2&sort=email&dir=desc');
+    ok(!str_contains($out, 'PHPERR'), 'no PHP errors: ' . $out);
+    ok(strpos($out, 'jane@acme.example.com') < strpos($out, 'frank.l@millstreamtech.co.uk'), 'email descending');
+    ok(str_contains($out, 'href="?tag=2&amp;sort=email&amp;dir=asc#users"'), 'clicking again flips, keeps tag');
+    ok(str_contains($out, 'href="?tag=2&amp;sort=username&amp;dir=asc#users"'), 'other column starts ascending');
+    ok(str_contains($out, 'name="sort" value="email"'), 'filter form carries the sort');
+});

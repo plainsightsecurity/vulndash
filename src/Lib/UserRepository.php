@@ -22,6 +22,22 @@ class UserRepository
      *
      * @return array<int, array<string, mixed>>
      */
+    /**
+     * Manage Users column sorts: key => [ORDER BY expression, flip]. "flip"
+     * reverses the direction so "ascending" reads naturally on screen -
+     * Role ascending is Admin before Client, MFA ascending is Enabled first.
+     * Everything ties on username. This whitelist is what protects the
+     * query; the page only passes the key through.
+     */
+    public const USER_SORT_COLUMNS = [
+        'username'   => ['u.username', false],
+        'email'      => ['u.email', false],
+        'role'       => ['u.is_admin', true],
+        'tags'       => ['tag_names', false],
+        'mfa'        => ['u.mfa_enabled', true],
+        'last_login' => ['u.last_login_at', false],
+    ];
+
     /** Filter value for listUsers()'s $tagFilter: accounts with no tags at all. */
     public const TAG_FILTER_NONE = 'none';
 
@@ -35,8 +51,14 @@ class UserRepository
      *
      * @param int|string|null $tagFilter
      */
-    public static function listUsers(?string $search = null, int|string|null $tagFilter = null): array
+    public static function listUsers(?string $search = null, int|string|null $tagFilter = null, ?string $sort = null, string $dir = 'asc'): array
     {
+        [$sortExpr, $flip] = self::USER_SORT_COLUMNS[$sort ?? 'username'] ?? self::USER_SORT_COLUMNS['username'];
+        $descending = (strtolower($dir) === 'desc') !== $flip;
+        // Accounts with no tags / never signed in go last in either direction.
+        $nullsLast = in_array($sortExpr, ['tag_names', 'u.last_login_at'], true) ? "{$sortExpr} IS NULL, " : '';
+        $orderBy = $nullsLast . $sortExpr . ($descending ? ' DESC' : ' ASC') . ($sortExpr !== 'u.username' ? ', u.username ASC' : '');
+
         $where = [];
         $params = [];
         if ($search !== null && $search !== '') {
@@ -63,7 +85,7 @@ class UserRepository
             LEFT JOIN tags t ON t.id = ut.tag_id
             " . ($where !== [] ? 'WHERE ' . implode(' AND ', $where) : '') . "
             GROUP BY u.id
-            ORDER BY u.username
+            ORDER BY {$orderBy}
         ");
         $stmt->execute($params);
         return $stmt->fetchAll();
