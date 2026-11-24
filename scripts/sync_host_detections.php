@@ -152,6 +152,20 @@ declare(strict_types=1);
  * Recorded in sync_state 'host_list_pass'. The 6-hourly reconcile's own
  * full pulls are unaffected.
  *
+ * Auto interval (2026-11-24): cron still runs this every
+ * sync.host_detection_cron_minutes (30), but each run first forecasts the
+ * day's Qualys calls per endpoint and version (src/Lib/ApiBudget.php) and
+ * picks the shortest of sync.host_detection_auto_intervals that fits the
+ * limit less qualys.min_calls_reserve. If less than that has passed since
+ * the last run that went ahead, it exits straight away (no sync_log row),
+ * so the sync slows down as the estate grows past a page and speeds back
+ * up when it fits again. Decision in sync_state 'host_detection_auto'.
+ * --force runs regardless; sync.host_detection_auto_interval => false turns
+ * it off. The same check emails admins (src/Lib/ApiBudgetAlerts.php) when
+ * an endpoint runs low, the forecast doesn't fit at all, or the interval
+ * changes. And each pull now skips a version Qualys last reported at the
+ * reserve, moving on to the next one, rather than failing the run.
+ *
  * Host List version rotation (2026-11-24): the pass used to reuse whichever
  * version the detection pull was assigned. With the pass on every other run
  * (60-minute interval, 30-minute sync) and four versions in the detection
@@ -206,6 +220,8 @@ declare(strict_types=1);
 require_once __DIR__ . '/../src/bootstrap.php';
 require_once __DIR__ . '/lib/QualysApiClient.php';
 
+use VulnDash\Lib\ApiBudget;
+use VulnDash\Lib\ApiBudgetAlerts;
 use VulnDash\Lib\ApiCallLogRepository;
 use VulnDash\Lib\AssetInventoryPruner;
 use VulnDash\Lib\Config;
@@ -222,7 +238,7 @@ use VulnDash\Scripts\QualysApiClient;
 // trusted - in the same "dry-run before --confirm" spirit as the other scripts.
 // Deliberately handled before the single-instance lock below: it only reads, so
 // it shouldn't be blocked by (or block) a running sync.
-$options = getopt('', ['dry-run-prune']);
+$options = getopt('', ['dry-run-prune', 'force']);
 if (array_key_exists('dry-run-prune', $options)) {
     $pdo = Database::getConnection();
     $retentionDays = max(1, (int)(Config::get('sync.resolution_retention_days') ?? 90));
@@ -254,6 +270,61 @@ if (!flock($lockHandle, LOCK_EX | LOCK_NB)) {
 }
 
 $pdo = Database::getConnection();
+
+// Auto interval and API budget alerts - see "Auto interval" in this file's
+// docblock and src/Lib/ApiBudget.php. Decided before anything is logged, so
+// a skipped run leaves no sync_log row behind. A failure here never stops
+// the sync: it just runs as it would have without this.
+$budgetReserve = max(0, (int)(Config::get('qualys.min_calls_reserve') ?? ApiBudget::DEFAULT_RESERVE));
+try {
+    $budgetIn = ApiBudget::currentInputs();
+    $budgetReserve = $budgetIn['reserve'];
+    $autoOn = ApiBudget::autoEnabled();
+    if (!$autoOn) {
+        $budgetIn['intervals'] = [$budgetIn['cron_minutes']];
+    }
+    $autoState = ApiBudget::autoState();
+    $choice = ApiBudget::chooseInterval($budgetIn);
+    $previousInterval = isset($autoState['interval']) ? (int)$autoState['interval'] : null;
+    $lastRunStartedAt = isset($autoState['last_run_started_at']) ? (int)$autoState['last_run_started_at'] : null;
+    $now = time();
+    // Cron fires a few seconds late or early; don't miss a slot over it.
+    $toleranceSec = min(5 * 60, intdiv($budgetIn['cron_minutes'] * 60, 2));
+    $runNow = !$autoOn || array_key_exists('force', $options) || $lastRunStartedAt === null
+        || $now - $lastRunStartedAt >= $choice['interval'] * 60 - $toleranceSec;
+
+    $pdo->prepare("
+        INSERT INTO sync_state (sync_type, state_json) VALUES ('host_detection_auto', :state)
+        ON DUPLICATE KEY UPDATE state_json = VALUES(state_json)
+    ")->execute(['state' => json_encode([
+        'enabled'             => $autoOn,
+        'interval'            => $choice['interval'],
+        'fits'                => $choice['fits'],
+        'peak'                => $choice['peak'],
+        'decided_at'          => $now,
+        'last_run_started_at' => $runNow ? $now : $lastRunStartedAt,
+    ])]);
+
+    fwrite(STDOUT, ($autoOn ? 'Auto interval' : 'Interval (auto off)') . ": every {$choice['interval']} min"
+        . ' (forecast peak ' . $choice['peak'] . ' calls/day per endpoint and version, usable ' . ApiBudget::usable($budgetIn) . ')'
+        . ($choice['fits'] ? '' : ' - DOES NOT FIT even at this interval') . "\n");
+
+    try {
+        foreach (ApiBudgetAlerts::check($budgetIn, $choice, $autoOn ? $previousInterval : null) as $line) {
+            fwrite(STDOUT, "Admin alert sent: {$line}\n");
+        }
+    } catch (\Throwable $e) {
+        fwrite(STDERR, 'API budget alert check failed (sync continues): ' . $e->getMessage() . "\n");
+    }
+
+    if (!$runNow) {
+        fwrite(STDOUT, 'Skipping this run: the last one started ' . (int)round(($now - $lastRunStartedAt) / 60)
+            . " min ago and the auto interval is {$choice['interval']} min. Use --force to run anyway.\n");
+        exit(0);
+    }
+} catch (\Throwable $e) {
+    fwrite(STDERR, 'API budget forecast failed (running this sync as normal): ' . $e->getMessage() . "\n");
+}
 
 $logStmt = $pdo->prepare('INSERT INTO sync_log (sync_type, started_at, status) VALUES (:type, :started, :status)');
 $logStmt->execute(['type' => 'host_detections', 'started' => date('Y-m-d H:i:s'), 'status' => 'running']);
@@ -318,7 +389,18 @@ try {
     $rrIndex = (int)($rrState['index'] ?? 0);
 
     $versions = array_keys($clientPool);
-    $pickedVersion = $versions[$rrIndex % count($versions)];
+    // Next version in the rotation that Qualys hasn't last reported as at
+    // or below the reserve - rather than walking into the client's reserve
+    // guard and failing the run. (See "Auto interval".)
+    $picked = ApiBudget::pickVersion($versions, $rrIndex, '/fo/asset/host/vm/detection/', $budgetReserve);
+    if ($picked === null) {
+        throw new \RuntimeException("Every Host Detection API version is at or below the {$budgetReserve}-call reserve per Qualys's last report - nothing to pull with until calls free up.");
+    }
+    if ($picked['index'] !== $rrIndex) {
+        fwrite(STDOUT, '/api/' . $versions[$rrIndex % count($versions)] . "/ Host Detection is at or below the reserve - using the next version with calls left.\n");
+    }
+    $rrIndex = $picked['index'];
+    $pickedVersion = $picked['version'];
     $pickedClient = $clientPool[$pickedVersion];
 
     // Advance and persist immediately, independent of whether this run's
@@ -420,19 +502,28 @@ try {
             . date('H:i', $hostListLastStartedAt + $hostListIntervalMinutes * 60 - $hostListPassToleranceSec) . ".\n");
     }
     if ($newHostPass && $hostListPassDue) {
+        // The Host List pass keeps its own place in the version rotation
+        // ('host_list_rr') rather than borrowing the detection pull's - see
+        // "Host List version rotation" in this file's docblock - and skips a
+        // version Qualys last reported at the reserve, like the pull above.
+        $hlRrStmt = $pdo->prepare('SELECT state_json FROM sync_state WHERE sync_type = :type');
+        $hlRrStmt->execute(['type' => 'host_list_rr']);
+        $hlRrState = json_decode((string)$hlRrStmt->fetchColumn(), true);
+        $hlRrIndex = is_array($hlRrState) ? max(0, (int)($hlRrState['index'] ?? 0)) : 0;
+        $hlPicked = ApiBudget::pickVersion($versions, $hlRrIndex, '/fo/asset/host/', $budgetReserve);
+        if ($hlPicked === null) {
+            fwrite(STDOUT, "New-host pass (Host List): skipped - every version is at or below the {$budgetReserve}-call reserve; it runs again once calls free up.\n");
+            $hostListPassDue = false;
+        }
+    }
+    if ($newHostPass && $hostListPassDue) {
         $existsStmt = $pdo->prepare('SELECT qualys_asset_id FROM assets WHERE qualys_host_id = :qualys_host_id');
         $fillAssetIdStmt = $pdo->prepare('UPDATE assets SET qualys_asset_id = :qualys_asset_id WHERE qualys_host_id = :qualys_host_id AND qualys_asset_id IS NULL');
         $listed = 0;
         $listedHostIds = [];
         $assetIdsFilled = 0;
-        // The Host List pass keeps its own place in the version rotation
-        // ('host_list_rr') rather than borrowing the detection pull's - see
-        // "Host List version rotation" in this file's docblock.
-        $hlRrStmt = $pdo->prepare('SELECT state_json FROM sync_state WHERE sync_type = :type');
-        $hlRrStmt->execute(['type' => 'host_list_rr']);
-        $hlRrState = json_decode((string)$hlRrStmt->fetchColumn(), true);
-        $hlRrIndex = is_array($hlRrState) ? max(0, (int)($hlRrState['index'] ?? 0)) : 0;
-        $hostListVersion = $versions[$hlRrIndex % count($versions)];
+        $hlRrIndex = $hlPicked['index'];
+        $hostListVersion = $hlPicked['version'];
         $hostListClient = $clientPool[$hostListVersion];
         $pdo->prepare('
             INSERT INTO sync_state (sync_type, state_json) VALUES (:type, :state)

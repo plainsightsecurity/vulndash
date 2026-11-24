@@ -41,6 +41,8 @@ PHP);
     $cfg['qualys']['api_base_url'] = "http://127.0.0.1:$port";
     $cfg['qualys']['host_detection_api_versions'] = ['2.0', '3.0', '4.0', '5.0'];
     $cfg['qualys']['host_list_pass_interval_minutes'] = $passEveryOtherRun ? 60 : 0;
+    // Back-to-back runs: the auto interval would (rightly) skip them.
+    $cfg['sync']['host_detection_auto_interval'] = false;
     file_put_contents("$dir/config.php", '<?php return ' . var_export($cfg, true) . ';');
 
     $pdo = Database::getConnection();

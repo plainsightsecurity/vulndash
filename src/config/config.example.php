@@ -76,6 +76,7 @@ return [
         'reconcile_api_versions'      => ['2.0', '3.0', '4.0', '5.0'], // default: reconcile_api_version below
         // 'reconcile_api_version'    => '4.0',  // older single-version setting; default api_version
         'min_calls_reserve'        => 3,     // stop before a version's remaining calls drop to this
+        'daily_call_limit'         => 25,    // per endpoint per version per 24h, used until Qualys reports its own
         'max_rate_limit_wait_sec'  => 300,   // longest wait for a rate-limit window before giving up
         'host_page_size'           => 5000,  // hosts per page (default 1000; 5000 = fewer calls)
 
@@ -107,6 +108,13 @@ return [
         'ods_asset_cooldown_minutes' => 60,   // per-asset cooldown for non-admins
     ],
 
+    // Admin alert emails (src/Lib/ApiBudgetAlerts.php): Qualys API budget low,
+    // forecast over the limit, or the host sync's auto interval changing.
+    'alerts' => [
+        // 'admin_emails'           => ['mark@plainsightsecurity.co.uk'], // default: every active admin
+        'api_budget_low_threshold'  => 5,   // default 5 calls left on an endpoint + version
+    ],
+
     'sync' => [
         'resolution_retention_days' => 90,
         'kb_missing_warn_hours'     => 36,    // admin warning when a missing KB QID stays unfetched
@@ -114,6 +122,15 @@ return [
         // Set these to match the crontab: KB sync twice daily, host sync every 30 min.
         'knowledge_base_expected_interval_minutes'  => 720,  // default 1440
         'host_detections_expected_interval_minutes' => 30,   // default 180
+
+        // Auto interval (src/Lib/ApiBudget.php): cron runs the host sync every
+        // host_detection_cron_minutes; each run picks the shortest of
+        // host_detection_auto_intervals whose forecast fits the Qualys limit
+        // and skips itself until then. Must match the crontab.
+        'host_detection_auto_interval'  => true,              // default true
+        'host_detection_cron_minutes'   => 30,                // default 30
+        'host_detection_auto_intervals' => [30, 60, 120, 240], // default
+        'reconcile_runs_per_day'        => 4,                 // default 4 (40 0,6,12,18)
     ],
 
     'audit' => [

@@ -158,6 +158,34 @@ final class Mailer
         return self::send($toEmail, $toName, $subject, $html, $text);
     }
 
+    /**
+     * Operational alert for admins (ApiBudgetAlerts): plain lines about the
+     * platform itself - API budget, sync interval - never vulnerability data.
+     *
+     * @param string[] $lines
+     */
+    public static function sendAdminAlertEmail(string $toEmail, string $toName, string $topic, array $lines, string $url): bool
+    {
+        $appName = (string)(Config::get('app.name') ?? 'VulnDash');
+        $subject = "{$appName} admin alert: {$topic}";
+        $greeting = $toName !== '' ? 'Hi ' . self::h($toName) . ',' : 'Hi,';
+
+        $html = self::wrapHtml(
+            '<p>' . $greeting . '</p>'
+            . '<p>' . self::h($appName) . ' needs your attention:</p>'
+            . '<ul>' . implode('', array_map(static fn (string $l): string => '<li style="margin-bottom:0.5em;">' . self::h($l) . '</li>', $lines)) . '</ul>'
+            . self::button($url, 'Open API Usage')
+            . '<p style="color:#5B6472;font-size:13px;">You get this because you are an admin. The same alert '
+            . "isn't repeated for 24 hours.</p>"
+        );
+        $text = ($toName !== '' ? "Hi {$toName},\n\n" : "Hi,\n\n")
+            . "{$appName} needs your attention:\n\n"
+            . implode("\n", array_map(static fn (string $l): string => "- {$l}", $lines))
+            . "\n\n{$url}\n";
+
+        return self::send($toEmail, $toName, $subject, $html, $text);
+    }
+
     private static function button(string $href, string $label): string
     {
         return '<p><a href="' . self::h($href) . '" '

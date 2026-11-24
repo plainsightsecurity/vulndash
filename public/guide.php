@@ -490,6 +490,7 @@ require __DIR__ . '/../src/views/header.php';
 <section class="guide-section" id="admin-api">
     <h2>API Usage <span class="badge badge-accent guide-admin-badge">Admin</span></h2>
     <p>Every call the dashboard has made to the Qualys API, counted per request: by API version and endpoint, hour by hour over the last 24 hours, and day by day over the last 30. Use it to check the syncs and on-demand scans are staying inside the subscription's API limits.</p>
+    <p>The <strong>Forecast</strong> panel at the top projects each API version's Host Detection and Host List calls per day at the current number of assets, and roughly how many assets would fit at each sync interval. The host sync picks the shortest interval that fits by itself (shown as <em>auto</em>), and admins are emailed when it changes, when the forecast can't fit at all, or when Qualys reports 5 or fewer calls left on an endpoint.</p>
 </section>
 <?php endif; ?>
 

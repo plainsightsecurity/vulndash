@@ -1520,6 +1520,8 @@ body.chart-fullscreen-open { overflow: hidden; }
 .badge-accent  { background: var(--signal-dim); color: var(--signal); }
 .badge-active   { background: rgba(var(--success-rgb), 0.18); color: var(--success-text); }
 .badge-inactive { background: rgba(var(--text-muted-rgb), 0.18); color: var(--text-muted); }
+.badge-danger   { background: rgba(var(--danger-rgb), 0.18); color: var(--danger-text); }
+.badge-warn     { background: rgba(201, 154, 58, 0.22); color: var(--text); }
 
 .tag-chip-list { display: flex; flex-wrap: wrap; gap: 0.3rem; }
 .tag-chip {

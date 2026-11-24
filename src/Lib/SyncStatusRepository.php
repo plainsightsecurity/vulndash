@@ -106,6 +106,11 @@ class SyncStatusRepository
 
             $expectedMinutes = (int)(Config::get("sync.{$syncType}_expected_interval_minutes")
                 ?? self::DEFAULT_EXPECTED_INTERVAL_MINUTES[$syncType]);
+            // When the host sync's auto interval has slowed it down to fit
+            // the API budget, that's the cadence to judge "overdue" by.
+            if ($syncType === 'host_detections') {
+                $expectedMinutes = max($expectedMinutes, (int)(ApiBudget::autoState()['interval'] ?? 0));
+            }
 
             $state = self::deriveState($latest, $lastSuccessAt, $expectedMinutes);
 
