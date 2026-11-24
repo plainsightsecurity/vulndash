@@ -31,6 +31,17 @@ return [
         'password' => 'CHANGE-ME',
     ],
 
+    // Sign-in timeouts and session storage - see src/Lib/SessionTimeout.php.
+    // The save_path directory must exist and be writable by www-data:
+    //   sudo install -d -o www-data -g www-data -m 0700 /var/lib/vulndash/sessions
+    // Without it sessions fall back to PHP's default directory, where Ubuntu's
+    // sessionclean cron signs users out after 24-54 minutes idle.
+    'session' => [
+        'save_path'                => '/var/lib/vulndash/sessions',
+        'idle_timeout_minutes'     => 480,  // 8 hours with no requests
+        'absolute_timeout_minutes' => 720,  // 12 hours after sign-in, however active; 0 = off
+    ],
+
     'security' => [
         // 32 random bytes, base64 - encrypts stored TOTP secrets. Generate with:
         //   php -r 'echo base64_encode(random_bytes(32)), PHP_EOL;'

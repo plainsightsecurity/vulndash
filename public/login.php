@@ -6,6 +6,11 @@ require_once __DIR__ . '/../src/bootstrap.php';
 use VulnDash\Lib\Auth;
 use VulnDash\Lib\Config;
 use VulnDash\Lib\Helpers;
+use VulnDash\Lib\SessionTimeout;
+
+// An expired session must not be bounced straight back to the dashboard.
+SessionTimeout::enforce();
+$signedOutMessage = SessionTimeout::takeSignedOutMessage();
 
 if (!empty($_SESSION['user_id'])) {
     header('Location: /dashboard');
@@ -91,6 +96,9 @@ $appName = Config::get('app.name') ?? 'Vulnerability Management Dashboard';
             </button>
         </div>
 
+        <?php if ($signedOutMessage !== null && $error === null): ?>
+        <p class="form-notice" role="status"><?= htmlspecialchars($signedOutMessage) ?></p>
+        <?php endif; ?>
         <?php if ($error !== null): ?>
         <p class="form-error" role="alert"><?= htmlspecialchars($error) ?></p>
         <?php endif; ?>

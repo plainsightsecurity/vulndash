@@ -277,6 +277,9 @@ class Auth
         $_SESSION['can_uninstall'] = UserRepository::getCanUninstall((int)$user['id']);
 
         unset($_SESSION['mfa_pending_user_id'], $_SESSION['mfa_pending_since']);
+
+        // Starts the idle and absolute session timeouts (SessionTimeout).
+        SessionTimeout::markLogin();
     }
 
     private static function registerFailedAttempt(\PDO $pdo, int $userId, int $currentAttempts): void
@@ -307,6 +310,11 @@ class Auth
 
     public static function check(): void
     {
+        // Idle (8h) and absolute (12h) timeouts - empties the session if
+        // either has run out, so the check below sends it to the login page,
+        // which explains why. See SessionTimeout.
+        SessionTimeout::enforce();
+
         if (empty($_SESSION['user_id'])) {
             header('Location: /login');
             exit;

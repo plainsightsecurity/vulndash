@@ -31,6 +31,7 @@ class AuditLog
         'auth.account_locked'          => 'Account locked (too many failed sign-ins)',
         'auth.mfa_failed'              => 'Two-factor code rejected',
         'auth.logout'                  => 'Signed out',
+        'auth.session_expired'         => 'Session timed out',
         'account.password_changed'     => 'Changed own password',
         'account.password_reset_requested' => 'Requested a password reset email',
         'account.password_reset'       => 'Set password from emailed link',

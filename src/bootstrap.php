@@ -43,6 +43,11 @@ spl_autoload_register(function (string $class): void {
 // CLI scripts (cron jobs, account creation) don't need session handling.
 if (PHP_SAPI !== 'cli') {
     ini_set('session.use_strict_mode', '1');
+    // Own session directory + garbage collection, so Ubuntu's sessionclean
+    // cron no longer signs users out after 24-54 minutes idle - see
+    // src/Lib/SessionTimeout.php. The idle/absolute timeouts themselves are
+    // enforced in Auth::check().
+    \VulnDash\Lib\SessionTimeout::configureStorage();
     session_set_cookie_params([
         'lifetime' => 0,
         'path'     => '/',
