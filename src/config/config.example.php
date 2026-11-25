@@ -105,6 +105,7 @@ return [
         'ods_override_cpu'           => false,
         'ods_daily_budget'           => 22,   // scan requests sent per day
         'ods_min_interval_minutes'   => 10,   // gap between send batches
+        'ods_burst'                  => 6,    // sends allowed close together before pacing spreads the rest of the day's budget (0 = off)
         'ods_asset_cooldown_minutes' => 60,   // per-asset cooldown for non-admins
     ],
 
@@ -113,6 +114,7 @@ return [
     'alerts' => [
         // 'admin_emails'           => ['mark@plainsightsecurity.co.uk'], // default: every active admin
         'api_budget_low_threshold'  => 5,   // default 5 calls left on an endpoint + version
+        'ods_busy_calls'            => 18,  // email when on-demand scan calls in 24h reach this (0 = off)
     ],
 
     'sync' => [

@@ -94,7 +94,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'unins
 // scope - see ScanRequestRepository::enqueue()). Writes 'pending' rows only;
 // scripts/process_scan_requests.php sends them to Qualys in one bulk call,
 // normally within about 10 minutes, under that endpoint's limit of 25 calls a
-// day (see ScanRequestRepository::sendWindow()).
+// day - paced through the day when busy (see ScanRequestRepository::sendWindow()).
 // ---------------------------------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'request_scan') {
     if (!Helpers::verifyCsrf($_POST['csrf_token'] ?? null)) {
@@ -126,7 +126,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'reque
         }
         $parts[] = $r['queued'] . ' asset' . ($r['queued'] === 1 ? '' : 's')
             . ' queued for an on-demand vulnerability scan (' . $names . '). '
-            . 'Requests go to Qualys together, normally within about 10 minutes; new results show here once the agent has scanned and Qualys has processed them.';
+            . 'They go to Qualys ' . ScanRequestRepository::describeNextSend(ScanRequestRepository::sendWindow()) . '; '
+            . 'new results show here once the agent has scanned and Qualys has processed them.';
     }
     if ($r['already_queued'] > 0) {
         $parts[] = $r['already_queued'] . ' already queued.';
@@ -487,7 +488,7 @@ function confirmBulkAction(form, submitter) {
  * within that needs no time quoting.
  *
  * @param array{status:string, requested_at:string, processed_at:?string, last_error:?string}|null $req
- * @param array{calls_24h:int, budget:int, min_gap_minutes:int, next_at:int}|null $window
+ * @param array{calls_24h:int, budget:int, min_gap_minutes:int, burst:int, next_at:int, reason:string}|null $window
  * @return array{label:string, class:string, title:string}|null
  */
 function scanRequestChip(?array $req, ?string $lastScanDateUtc, ?array $window = null): ?array
@@ -497,17 +498,17 @@ function scanRequestChip(?array $req, ?string $lastScanDateUtc, ?array $window =
     }
     $requested = date('d M H:i', (int)strtotime($req['requested_at']));
     if ($req['status'] === 'pending' || $req['status'] === 'processing') {
-        if ($window !== null && $window['next_at'] > time() + 300) {
-            $when = 'next send from ' . date('H:i', $window['next_at'])
-                . ($window['calls_24h'] >= $window['budget'] ? ", when today's on-demand scan budget frees up" : '');
-        } else {
-            $when = 'it goes on the next send, within about 5 minutes';
-        }
-        $title = 'On-demand scan requested ' . $requested . ' - waiting to be sent to Qualys (' . $when . ').';
+        // A send more than ~5 minutes off goes in the label itself, so a
+        // paced or budget-limited day reads as "waiting until 14:20", not as
+        // a request that's stuck.
+        $later = $window !== null && $window['next_at'] > time() + 300;
+        $title = 'On-demand scan requested ' . $requested . ' - waiting to be sent to Qualys '
+            . ($window !== null ? ScanRequestRepository::describeNextSend($window) : 'within about 5 minutes') . '.';
         if ($req['last_error'] !== null) {
             $title .= ' ' . $req['last_error'];
         }
-        return ['label' => 'Scan queued', 'class' => 'badge-accent', 'title' => $title];
+        $label = 'Scan queued' . ($later ? ' · ' . (date('Y-m-d', $window['next_at']) === date('Y-m-d') ? '' : 'tmrw ') . date('H:i', $window['next_at']) : '');
+        return ['label' => $label, 'class' => 'badge-accent', 'title' => $title];
     }
     if ($req['status'] === 'failed') {
         return ['label' => 'Scan failed', 'class' => 'badge-neutral', 'title' => 'On-demand scan requested ' . $requested . ' could not be sent. ' . (string)$req['last_error']];

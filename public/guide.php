@@ -287,7 +287,7 @@ require __DIR__ . '/../src/views/header.php';
     </div>
 
     <h3>Scanning on demand</h3>
-    <p>Agents scan on their own schedule. To get fresh results sooner (after patching, say), tick the assets and press <strong>Scan selected now</strong>. Requests go to Qualys together, normally within about 10 minutes. The <span class="badge badge-accent">Scan queued</span> chip changes to <span class="badge badge-accent">Scan requested</span> once sent, and new results appear after the agent has scanned and Qualys has processed them.<?php if ($cooldownMins > 0): ?> Each asset can be scanned on request once every <?= $cooldownMins ?> minutes.<?php endif; ?></p>
+    <p>Agents scan on their own schedule. To get fresh results sooner (after patching, say), tick the assets and press <strong>Scan selected now</strong>. Requests go to Qualys together, normally within about 10 minutes. On a very busy day they're spread out so there's allowance left for later, and the chip shows when they'll go (for example <span class="badge badge-accent">Scan queued · 14:20</span>). The <span class="badge badge-accent">Scan queued</span> chip changes to <span class="badge badge-accent">Scan requested</span> once sent, and new results appear after the agent has scanned and Qualys has processed them.<?php if ($cooldownMins > 0): ?> Each asset can be scanned on request once every <?= $cooldownMins ?> minutes.<?php endif; ?></p>
 
     <?php if ($canInstall): ?>
     <h3>Installing the agent on a new machine</h3>

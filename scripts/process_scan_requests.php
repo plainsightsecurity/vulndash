@@ -15,7 +15,8 @@ declare(strict_types=1);
  * ScanRequestRepository::sendWindow() allows it: fewer than
  * qualys.ods_daily_budget calls (default 22) in the last 24h, and at least
  * qualys.ods_min_interval_minutes (default 10) since the last call, so a
- * burst of requests is batched. Both are counted from qualys_api_call_log,
+ * burst of requests is batched, and - on busy days - paced so the budget
+ * lasts through the day (qualys.ods_burst, default 6; see sendWindow()). Both are counted from qualys_api_call_log,
  * so failed calls and manual probes count, as they do at Qualys. A run with
  * nothing pending, or not yet allowed to send, makes no call. (Until
  * 2026-11-10 this was a fixed 60-minute gap, which made most requests wait
@@ -41,6 +42,7 @@ declare(strict_types=1);
  * Config (src/config/config.php, all optional):
  *   qualys.ods_daily_budget          default 22 (of Qualys's 25 per 24h)
  *   qualys.ods_min_interval_minutes  default 10
+ *   qualys.ods_burst                 default 6 (0 = no pacing)
  *   qualys.ods_scan_type             default 'Vulnerability_Scan'
  *   qualys.ods_override_cpu          default false (keep the agents' CPU throttle)
  *
@@ -106,9 +108,11 @@ if ($pending === 0) {
 $window = ScanRequestRepository::sendWindow();
 $budgetLine = "{$window['calls_24h']} of {$window['budget']} on-demand call(s) used in the last 24h";
 if (time() < $window['next_at']) {
-    $why = $window['calls_24h'] >= $window['budget']
-        ? 'the 24h budget is used up until then'
-        : "sends are at least {$window['min_gap_minutes']} minutes apart";
+    $why = match ($window['reason']) {
+        'budget' => 'the 24h budget is used up until then',
+        'pacing' => "pacing: after {$window['burst']} sends close together, the rest of the budget is spread through the day",
+        default  => "sends are at least {$window['min_gap_minutes']} minutes apart",
+    };
     fwrite(STDOUT, "{$pending} request(s) pending; {$budgetLine}. Next send allowed from "
         . date('H:i', $window['next_at']) . " ({$why}). Not sending yet.\n");
     finish(0);

@@ -44,6 +44,13 @@ class ScanRequestRepository
     public const DEFAULT_DAILY_BUDGET = 22;
     public const DEFAULT_MIN_GAP_MINUTES = 10;
 
+    /**
+     * Default for qualys.ods_burst - see sendWindow(): how many sends can go
+     * close together (10 minutes apart) after a quiet spell before pacing
+     * spreads the rest of the budget through the day.
+     */
+    public const DEFAULT_BURST = 6;
+
     /** Default for qualys.ods_asset_cooldown_minutes - see the class docblock. */
     public const DEFAULT_ASSET_COOLDOWN_MINUTES = 60;
 
@@ -213,29 +220,40 @@ class ScanRequestRepository
 
     /**
      * When the worker may next send, under the on-demand scan endpoint's
-     * limit of 25 calls per rolling 24h. Replaces a fixed hourly gap
-     * (2026-11-10): a send goes as soon as anything is queued, provided
-     *   - fewer than qualys.ods_daily_budget calls were made in the last
-     *     24h, and
-     *   - at least qualys.ods_min_interval_minutes have passed since the
-     *     last call.
-     * When the budget is used up, the next send is allowed once enough of
-     * the oldest calls in the window are 24h old - the same moment Qualys
-     * frees them, since its window is rolling too.
+     * limit of 25 calls per rolling 24h. Three rules; the latest wins:
      *
+     *   1. Gap: at least qualys.ods_min_interval_minutes (default 10) since
+     *      the last call, so a burst of clicks goes out as one call.
+     *   2. Pacing (2026-11-25): a token bucket holding up to
+     *      qualys.ods_burst calls (default 6), refilling at what's left of the
+     *      budget after a burst, spread over 24h ((22 - 6) a day = one every
+     *      90 minutes). When it's been quiet, sends go every 10 minutes as
+     *      before; under steady demand they settle to one every ~90 minutes
+     *      all day, instead of the whole day's budget going by lunchtime and
+     *      later requests waiting until the next morning. Burst plus refill
+     *      never exceeds the budget in any 24h, so steady demand never runs
+     *      into rule 3. qualys.ods_burst = 0 turns pacing off.
+     *   3. Budget: fewer than qualys.ods_daily_budget (default 22) calls in
+     *      the rolling 24h - the hard stop, freed when the oldest calls in the
+     *      window turn 24h old, the same moment Qualys frees them.
+     *
+     * The bucket is worked out from the call log each time (no stored
+     * state): it starts full 48h back and is replayed over the calls since.
      * Counted from qualys_api_call_log rather than from this queue, so a
      * failed call and a manual probe count, exactly as they do at Qualys.
      * called_at is written with PHP's date() in the app's own zone, which is
      * how strtotime() reads it back here.
      *
-     * @return array{calls_24h:int, budget:int, min_gap_minutes:int, next_at:int}
-     *         next_at <= time() means a send is allowed now
+     * @return array{calls_24h:int, budget:int, min_gap_minutes:int, burst:int, next_at:int, reason:string}
+     *         next_at <= time() means a send is allowed now; reason says which
+     *         rule set next_at: 'now', 'gap', 'pacing' or 'budget'
      */
     public static function sendWindow(?int $now = null): array
     {
         $now ??= time();
         $budget = max(1, (int)(Config::get('qualys.ods_daily_budget') ?? self::DEFAULT_DAILY_BUDGET));
         $gapMinutes = max(0, (int)(Config::get('qualys.ods_min_interval_minutes') ?? self::DEFAULT_MIN_GAP_MINUTES));
+        $burst = max(0, (int)(Config::get('qualys.ods_burst') ?? self::DEFAULT_BURST));
 
         $stmt = Database::getConnection()->prepare(
             'SELECT called_at FROM qualys_api_call_log
@@ -244,29 +262,82 @@ class ScanRequestRepository
         );
         $stmt->execute([
             'endpoint' => self::ODS_ENDPOINT,
-            'since'    => date('Y-m-d H:i:s', $now - self::WINDOW_SECONDS),
+            'since'    => date('Y-m-d H:i:s', $now - 2 * self::WINDOW_SECONDS),
         ]);
-        $calls = array_values(array_filter(array_map(
+        $all = array_values(array_filter(array_map(
             static fn ($v) => strtotime((string)$v),
             $stmt->fetchAll(\PDO::FETCH_COLUMN)
         )));
+        $calls = array_values(array_filter($all, static fn (int $t) => $t >= $now - self::WINDOW_SECONDS));
 
         $nextAt = $now;
+        $reason = 'now';
+        $later = static function (int $t, string $why) use (&$nextAt, &$reason): void {
+            if ($t > $nextAt) {
+                $nextAt = $t;
+                $reason = $why;
+            }
+        };
+
         if ($calls !== []) {
-            $nextAt = max($nextAt, end($calls) + $gapMinutes * 60);
+            $later(end($calls) + $gapMinutes * 60, 'gap');
         }
+
+        if ($burst > 0) {
+            // Token bucket replayed over the last 48h of calls. A call spends
+            // one token; tokens come back at $budget per 24h, up to $burst.
+            $burst = min($burst, $budget - 1);
+            $rate = ($budget - $burst) / self::WINDOW_SECONDS; // tokens per second
+            $tokens = (float)$burst;
+            $t = $now - 2 * self::WINDOW_SECONDS;
+            foreach ($all as $callAt) {
+                $tokens = min((float)$burst, $tokens + ($callAt - $t) * $rate) - 1.0;
+                $t = $callAt;
+            }
+            $tokens = min((float)$burst, $tokens + ($now - $t) * $rate);
+            if ($tokens < 1.0) {
+                $later($now + (int)ceil((1.0 - $tokens) / $rate), 'pacing');
+            }
+        }
+
         if (count($calls) >= $budget) {
             // The window must lose (count - budget + 1) calls to fit one more,
             // and the oldest go first.
-            $nextAt = max($nextAt, $calls[count($calls) - $budget] + self::WINDOW_SECONDS);
+            $later($calls[count($calls) - $budget] + self::WINDOW_SECONDS, 'budget');
         }
 
         return [
             'calls_24h'       => count($calls),
             'budget'          => $budget,
             'min_gap_minutes' => $gapMinutes,
+            'burst'           => $burst,
             'next_at'         => $nextAt,
+            'reason'          => $reason,
         ];
+    }
+
+    /**
+     * When a request queued now will go to Qualys, in words, for the Assets
+     * page and its flash message. The worker runs every 5 minutes, so a send
+     * allowed within that is "within about 5 minutes"; anything later is
+     * quoted as a time, with why when it's pacing or the daily limit.
+     *
+     * @param array{next_at:int, reason:string} $window sendWindow()
+     */
+    public static function describeNextSend(array $window, ?int $now = null): string
+    {
+        $now ??= time();
+        if ($window['next_at'] <= $now + 300) {
+            return 'within about 5 minutes';
+        }
+        // The worker picks it up on its next 5-minute run after next_at.
+        $at = $window['next_at'];
+        $when = (date('Y-m-d', $at) === date('Y-m-d', $now) ? 'at about ' : 'tomorrow at about ') . date('H:i', $at);
+        return match ($window['reason']) {
+            'pacing' => $when . ' - it\'s been a busy day, so scan requests are being spread out to keep some of the daily Qualys allowance for later',
+            'budget' => $when . ', when the daily Qualys allowance for on-demand scans frees up',
+            default  => $when,
+        };
     }
 
     public static function countPending(): int

@@ -13,6 +13,11 @@ namespace VulnDash\Lib;
  *               so syncs will start failing for lack of calls
  *   - interval: the auto interval changed (the sync slowed down or sped back
  *               up) - so a slower sync is never a surprise
+ *   - scans:    on-demand scan calls in the rolling 24h reached
+ *               alerts.ods_busy_calls (default 18 of the 22 budget), so
+ *               requests are being paced or will soon wait for the limit
+ *               (2026-11-25). Counted locally: Qualys's QPS endpoints don't
+ *               report a "calls left" figure.
  *
  * "low" and "over" are sent at most once per 24h per endpoint/version (state
  * in sync_state 'api_budget_alerts'); conditions found in the same run go in
@@ -23,6 +28,7 @@ namespace VulnDash\Lib;
 final class ApiBudgetAlerts
 {
     public const DEFAULT_LOW_THRESHOLD = 5;
+    public const DEFAULT_ODS_BUSY_CALLS = 18;
     private const REPEAT_SECONDS = 86400;
 
     private const ENDPOINTS = [
@@ -77,6 +83,19 @@ final class ApiBudgetAlerts
                     $lines[] = "/api/{$version}/ {$label}: Qualys reports {$remaining} of {$in['limit']} calls left in the rolling 24 hours.";
                 }
             }
+        }
+
+        $ods = ScanRequestRepository::sendWindow($now);
+        $odsBusy = (int)(Config::get('alerts.ods_busy_calls') ?? self::DEFAULT_ODS_BUSY_CALLS);
+        if ($odsBusy > 0 && $ods['calls_24h'] >= $odsBusy && $due('ods_busy')) {
+            $lines[] = sprintf(
+                'On-demand scans: %d of the %d-a-day budget used in the last 24 hours. New requests are being spread out%s; '
+                . 'if this keeps happening, clients will notice scans taking longer to start. Options: a longer qualys.ods_asset_cooldown_minutes, '
+                . 'or more API calls from Qualys.',
+                $ods['calls_24h'],
+                $ods['budget'],
+                $ods['next_at'] > $now ? ' (next send from ' . date('H:i', $ods['next_at']) . ')' : ''
+            );
         }
 
         if ($lines === []) {
