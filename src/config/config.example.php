@@ -139,6 +139,16 @@ return [
         'retention_days' => 365,              // Audit Log rows older than this are pruned
     ],
 
+    // History tables pruned daily by scripts/prune_history.php
+    // (src/Lib/HistoryPruner.php). Values below a table's minimum are raised
+    // to it, so the pages that read these tables always have their data.
+    'retention' => [
+        'api_call_log_days'  => 90,   // default 90, minimum 30 (API Usage page shows 30 days)
+        'sync_log_days'      => 90,   // default 90, minimum 7; latest + last successful run per sync always kept
+        'scan_request_days'  => 90,   // default 90, minimum 7; sent/failed requests only
+        'vuln_snapshot_days' => 400,  // default 400, minimum 90 (Trends 90-day window)
+    ],
+
     'assets' => [
         'stale_after_days' => 7,              // "not reporting" threshold for agents
     ],

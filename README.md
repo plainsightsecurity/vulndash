@@ -492,6 +492,22 @@ action), needs `database/migrations/2026-11-add-audit-log.sql`, and prunes
 itself after `audit.retention_days` (default 365) - no cron job. Actions by
 CLI scripts and cron jobs aren't recorded.
 
+**History retention.** `scripts/prune_history.php` trims the history tables
+that nothing else prunes: `qualys_api_call_log`, `sync_log`, sent/failed rows
+in `scan_request_queue`, and the daily posture snapshots in
+`asset_vuln_snapshot`. Defaults are 90 days for the first three and 400 days
+for snapshots (enough for a year-on-year comparison), set under `retention` in
+`src/config/config.php`. Each has a minimum it won't go below (30 / 7 / 7 / 90
+days) so the API Usage page and Trends always have their data, and the newest
+run and newest successful run of each sync are kept whatever their age, since
+the host and KB syncs take their incremental starting point from the last
+success. Pending scan requests are never touched. Deletes run in batches of
+5,000. Makes no Qualys API calls. `--dry-run` reports what would go.
+
+```cron
+20 3 * * * php /var/www/dashboard.plainsightsecurity.co.uk/scripts/prune_history.php >> /var/log/vulndash/prune_history.log 2>&1
+```
+
 **New-QID fast-path.** Each steady-state KB run (after the historical backfill
 completes) makes one extra id-range call - `id_min = (highest local QID) + 1` -
 to pick up brand-new QIDs immediately, without waiting for Qualys to index
