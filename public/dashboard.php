@@ -309,7 +309,7 @@ $postureTagSuffix = $viewTagId !== null ? ' in this tag' : '';
     <?php if ($totalOpenVulns === 0): ?>
     No open findings across <strong><?= number_format($assetCount) ?></strong> asset<?= $assetCount === 1 ? '' : 's' ?><?= $postureTagSuffix ?>.
     <?php else: ?>
-    <strong><?= number_format($totalOpenVulns) ?></strong> open finding<?= $totalOpenVulns === 1 ? '' : 's' ?> across <strong><?= number_format($assetCount) ?></strong> asset<?= $assetCount === 1 ? '' : 's' ?><?= $postureTagSuffix ?> — <strong><?= number_format($severityCounts[5]) ?></strong> critical, <strong><?= number_format($severityCounts[4]) ?></strong> high<?php if ($cePlusFailCount > 0): ?>, <strong><?= number_format($cePlusFailCount) ?></strong> failing Cyber Essentials Plus<?php endif; ?>.
+    <strong><?= number_format($totalOpenVulns) ?></strong> open finding<?= $totalOpenVulns === 1 ? '' : 's' ?> across <strong><?= number_format($assetCount) ?></strong> asset<?= $assetCount === 1 ? '' : 's' ?><?= $postureTagSuffix ?>: <strong><?= number_format($severityCounts[5]) ?></strong> critical, <strong><?= number_format($severityCounts[4]) ?></strong> high<?php if ($cePlusFailCount > 0): ?>, <strong><?= number_format($cePlusFailCount) ?></strong> failing Cyber Essentials Plus<?php endif; ?>.
     <?php endif; ?>
 </p>
 
@@ -506,7 +506,7 @@ require __DIR__ . '/../src/views/risk_gauge.php';
 
 <div class="chart-panel">
     <div class="chart-panel-header">
-        <h2>Vulnerability posture — last 30 days</h2>
+        <h2>Vulnerability posture: last 30 days</h2>
         <div class="chart-panel-tools">
             <span class="chart-panel-hint">Total open vulnerabilities per day</span>
             <?php if (!empty($linePoints)) { $chartPanelControls('the vulnerability posture chart'); } ?>
