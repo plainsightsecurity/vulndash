@@ -17,7 +17,9 @@ export DB_HOST=${DB_HOST:-127.0.0.1} DB_PORT=${DB_PORT:-3306} DB_USER=${DB_USER:
 export MYSQL_PWD="$DB_PASS"
 DB=vulndash_test
 MYSQL=(mysql --protocol=TCP -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER")
-DUMP=(mysqldump --protocol=TCP -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" --no-data --skip-comments --skip-dump-date --no-tablespaces)
+# schema_migrations is created by scripts/migrate.php itself, not by a
+# migration, so it's left out of the install_schema.sql comparison.
+DUMP=(mysqldump --protocol=TCP -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" --no-data --skip-comments --skip-dump-date --no-tablespaces --ignore-table="vulndash_test.schema_migrations")
 FAILED=()
 
 step() { echo; echo "=== $1 ==="; }
@@ -32,13 +34,17 @@ if "${MYSQL[@]}" "$DB" < install_schema.sql; then
     echo "  ok    install_schema.sql loads"
     # Every migration must already be reflected in install_schema.sql and be
     # safe to re-run: applying them all to a fresh install changes nothing.
+    # Applied through scripts/migrate.php, so the runner itself is exercised
+    # exactly as it is on the server.
     "${DUMP[@]}" "$DB" | sed -E 's/ AUTO_INCREMENT=[0-9]+//' > /tmp/vd_schema_before.sql
     MIG_OK=1
-    for m in database/migrations/*.sql; do
-        if ! "${MYSQL[@]}" "$DB" < "$m" >/dev/null 2>/tmp/vd_mig_err; then
-            echo "  FAIL  $m: $(head -c 300 /tmp/vd_mig_err)"; MIG_OK=0
-        fi
-    done
+    if ! php scripts/migrate.php --confirm >/tmp/vd_mig_out 2>&1; then
+        echo "  FAIL  scripts/migrate.php --confirm:"; sed -n '/FAILED\|ERROR/,$p' /tmp/vd_mig_out | sed 's/^/        /' | head -20; MIG_OK=0
+    elif ! php scripts/migrate.php 2>&1 | grep -q ' 0 pending, 0 changed\.$'; then
+        echo "  FAIL  scripts/migrate.php still reports something pending after --confirm"; MIG_OK=0
+    else
+        echo "  ok    scripts/migrate.php applied $(grep -c '^  running' /tmp/vd_mig_out) migrations and records them all"
+    fi
     "${DUMP[@]}" "$DB" | sed -E 's/ AUTO_INCREMENT=[0-9]+//' > /tmp/vd_schema_after.sql
     if [ $MIG_OK = 1 ] && diff -q /tmp/vd_schema_before.sql /tmp/vd_schema_after.sql >/dev/null; then
         echo "  ok    migrations re-run cleanly and install_schema.sql already includes them"

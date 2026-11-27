@@ -99,10 +99,25 @@ deploy-dashboard
 
 `/usr/local/bin/deploy-dashboard` runs `git pull --ff-only` as `www-data`,
 prints the new commit and the files changed, and lists any newly added
-files under `database/migrations/` - those still have to be run by hand
-(`sudo mysql vulndash < database/migrations/<file>.sql`). Crontab and
-`src/config/config.php` changes are manual too; the commit message says
-when one is needed.
+files under `database/migrations/`. Apply those with the migration runner,
+which knows which ones this database has already had:
+
+```
+sudo php /var/www/dashboard.plainsightsecurity.co.uk/scripts/migrate.php --root            # what's pending
+sudo php /var/www/dashboard.plainsightsecurity.co.uk/scripts/migrate.php --root --confirm  # apply it
+```
+
+`--root` connects as MySQL root over the local socket (as
+`sudo mysql vulndash` does); without it the runner uses the `db.*`
+credentials in `src/config/config.php`. It applies pending files in filename
+order, records each one in `schema_migrations` once it succeeds, stops at the
+first failure with the MySQL error, and flags any applied file that has been
+edited since (`CHANGED` - re-run it deliberately with `--rerun=<file>
+--confirm`). See the docblock in `scripts/migrate.php` for every option.
+First use on an existing database: `--baseline --confirm` records every
+current migration as applied without running anything.
+Crontab and `src/config/config.php` changes are still manual; the commit
+message says when one is needed.
 
 **Committing an edit made on the server:**
 
@@ -139,9 +154,10 @@ called `vulndash_test`:
 
 - **PHP syntax** - every `.php` file through `php -l`.
 - **Schema and migrations** - `install_schema.sql` loads on a fresh MySQL
-  8.0, and applying every file in `database/migrations/` on top of it
-  succeeds and changes nothing (so the migrations are safe to re-run and
-  `install_schema.sql` already includes them).
+  8.0, and applying every file in `database/migrations/` on top of it with
+  `scripts/migrate.php --confirm` succeeds and changes nothing (so the
+  migrations are safe to re-run and `install_schema.sql` already includes
+  them), after which the runner reports nothing pending.
 - **Unit and integration tests** (`tests/cases/*Test.php`) - CE+ scoring,
   tenant isolation, KEV/EPSS/CE+ filters and the PDF, scan-request
   cooldowns, the missing-KB-QID queue, and live account checks.
@@ -212,9 +228,15 @@ each test starts from an empty database, and `seed_estate()` in
    ```
 
    `install_schema.sql` already includes every migration in
-   `database/migrations/`, so a new install doesn't need to run them.
-   Those files are for an existing database: `deploy-dashboard` lists
-   any new ones after a pull (see "Updating the live server" above).
+   `database/migrations/`, so a new install doesn't need to run them -
+   record them as applied instead, so later ones are picked up correctly:
+
+   ```
+   sudo php scripts/migrate.php --root --baseline --confirm
+   ```
+
+   After that, `scripts/migrate.php` applies new migrations as they arrive
+   (see "Updating the live server" above).
 
 4. **Create `src/config/config.php`** from the example, then fill in the
    database password, Qualys credentials and Resend key:
