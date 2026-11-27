@@ -537,9 +537,7 @@ User Tag and Create Activation Key (plus Delete User Tag and Delete
 Activation Key to use Delete). Keys are licensed for
 `qualys.activation_key_modules` (default `['VM_LICENSE']`). Logic in
 `src/Lib/AgentProvisioner.php`; needs
-`database/migrations/2026-11-add-agent-provisioning.sql` (diagnostic:
-`scripts/diagnose_agent_provisioning_migration.php`, `--check-qualys` to
-confirm read access). No cron job.
+`database/migrations/2026-11-add-agent-provisioning.sql`. No cron job.
 
 **History retention.** `scripts/prune_history.php` trims the history tables
 that nothing else prunes: `qualys_api_call_log`, `sync_log`, sent/failed rows
