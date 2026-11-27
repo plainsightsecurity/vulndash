@@ -1,0 +1,35 @@
+# logrotate config for the VulnDash cron job logs in /var/log/vulndash/
+# (every job in the www-data crontab appends to its own *.log there with >>,
+# and nothing else trims them).
+#
+# Install (once, as root):
+#   sudo cp /var/www/dashboard.plainsightsecurity.co.uk/config/logrotate-vulndash /etc/logrotate.d/vulndash
+#   sudo chown root:root /etc/logrotate.d/vulndash && sudo chmod 644 /etc/logrotate.d/vulndash
+#   sudo logrotate -d /etc/logrotate.d/vulndash      # dry run: shows what it would do
+#
+# Ubuntu's daily logrotate timer then picks it up. A copy is needed (not a
+# symlink to the repo) because logrotate ignores config files that root
+# doesn't own. Apache's dashboard-*.log files live in /var/log/apache2 and
+# are already rotated by Ubuntu's own apache2 config.
+#
+# Kept: 8 weeks, compressed. A log that passes maxsize is rotated at the next
+# daily run rather than waiting for the week to end. No copytruncate or
+# postrotate is needed: each cron run opens its log afresh with >>, so the
+# next run simply writes to the new file. delaycompress leaves the newest
+# rotated file uncompressed, so a job that happened to be running during the
+# rotation finishes writing to it safely.
+
+/var/log/vulndash/*.log {
+    weekly
+    maxsize 50M
+    rotate 8
+    missingok
+    notifempty
+    compress
+    delaycompress
+    # /var/log/vulndash is owned by www-data, so logrotate has to act as
+    # www-data there (it refuses to rotate in a directory writable by a
+    # non-root user otherwise).
+    su www-data www-data
+    create 0640 www-data www-data
+}

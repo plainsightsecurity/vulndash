@@ -476,6 +476,16 @@ suggested cron entries are:
 ```
 
 Create the log directory first: `sudo mkdir -p /var/log/vulndash && sudo chown www-data:www-data /var/log/vulndash`.
+Then install the log rotation, or the cron logs grow forever (weekly, 8 weeks
+kept, compressed, and any log over 50 MB rotated at the next daily run - see
+the comments in the file):
+
+```
+sudo cp config/logrotate-vulndash /etc/logrotate.d/vulndash
+sudo chown root:root /etc/logrotate.d/vulndash && sudo chmod 644 /etc/logrotate.d/vulndash
+sudo logrotate -d /etc/logrotate.d/vulndash
+```
+
 Every run is recorded in the `sync_log` table (status, records processed,
 error message) regardless of cron - useful for a simple "last sync" widget
 later if you want one. The dashboard's sync-status strip flags a sync as
