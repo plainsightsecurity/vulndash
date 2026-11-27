@@ -46,6 +46,8 @@ final class SessionTimeout
 
     public const REASON_IDLE     = 'idle';
     public const REASON_ABSOLUTE = 'absolute';
+    /** Set by Auth::checkOwnAccount(), with the date in signed_out_access_until. */
+    public const REASON_ACCESS_EXPIRED = 'access_expired';
 
     /** Called from src/bootstrap.php before session_start(). */
     public static function configureStorage(): void
@@ -147,9 +149,11 @@ final class SessionTimeout
     public static function takeSignedOutMessage(): ?string
     {
         $reason = $_SESSION['signed_out_reason'] ?? null;
-        unset($_SESSION['signed_out_reason']);
+        $accessUntil = (string)($_SESSION['signed_out_access_until'] ?? '');
+        unset($_SESSION['signed_out_reason'], $_SESSION['signed_out_access_until']);
 
         return match ($reason) {
+            self::REASON_ACCESS_EXPIRED => AccessExpiry::endedMessage($accessUntil),
             self::REASON_IDLE     => 'You were signed out after ' . self::duration(self::idleSeconds()) . ' of inactivity. Please sign in again.',
             self::REASON_ABSOLUTE => 'For security, sessions last at most ' . self::duration(self::absoluteSeconds()) . '. Please sign in again.',
             default               => null,

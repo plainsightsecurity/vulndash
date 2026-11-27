@@ -7,6 +7,7 @@ declare(strict_types=1);
  * autoloader registered).
  */
 
+use VulnDash\Lib\AccessExpiry;
 use VulnDash\Lib\Auth;
 use VulnDash\Lib\Config;
 use VulnDash\Lib\Helpers;
@@ -150,6 +151,23 @@ $appName = Config::get('app.name') ?? 'Vulnerability Management Dashboard';
             <button type="submit" class="btn btn-sm btn-secondary">Return to admin</button>
         </form>
     </div>
+</div>
+<?php endif; ?>
+<?php
+// Access end date (AccessExpiry): a client sees this on every page in the
+// last 30 days. Viewing as an account whose access has already ended, the
+// admin is told that instead (the client themselves can't get this far).
+$accessUntil = Auth::accessUntil();
+$accessBanner = null;
+if ($accessUntil !== null && AccessExpiry::isEnding($accessUntil)) {
+    $accessBanner = AccessExpiry::endingMessage($accessUntil);
+} elseif ($accessUntil !== null && Auth::impersonator() !== null && AccessExpiry::isExpired($accessUntil)) {
+    $accessBanner = "This account's access ended on " . AccessExpiry::display($accessUntil) . ' - the client can no longer sign in.';
+}
+?>
+<?php if ($accessBanner !== null): ?>
+<div class="access-ending-bar" role="status">
+    <div class="impersonation-bar-inner"><span><?= Helpers::e($accessBanner) ?></span></div>
 </div>
 <?php endif; ?>
 <main class="site-main<?= !empty($wideLayout) ? ' site-main-wide' : '' ?>">

@@ -22,7 +22,7 @@ final class OrganisationRepository
     public static function listAll(): array
     {
         $rows = Database::getConnection()->query("
-            SELECT o.id, o.name, o.is_active, o.max_users,
+            SELECT o.id, o.name, o.is_active, o.max_users, o.expires_on,
                    (SELECT GROUP_CONCAT(ot.tag_id) FROM organisation_tags ot WHERE ot.organisation_id = o.id) AS tag_ids,
                    (SELECT GROUP_CONCAT(t.name ORDER BY t.name SEPARATOR ', ') FROM organisation_tags ot JOIN tags t ON t.id = ot.tag_id
                     WHERE ot.organisation_id = o.id) AS tag_names,
@@ -80,6 +80,16 @@ final class OrganisationRepository
             $pdo->rollBack();
             throw self::friendly($e);
         }
+    }
+
+    /**
+     * Sets (or clears, with null) the organisation's access end date - the
+     * last day its members can sign in. See AccessExpiry.
+     */
+    public static function setExpiresOn(int $id, ?string $date): void
+    {
+        Database::getConnection()->prepare('UPDATE organisations SET expires_on = :d WHERE id = :id')
+            ->execute(['d' => $date, 'id' => $id]);
     }
 
     public static function setActive(int $id, bool $active): void
@@ -145,6 +155,7 @@ final class OrganisationRepository
             'name'         => (string)$r['name'],
             'is_active'    => (int)$r['is_active'] === 1,
             'max_users'    => $r['max_users'] !== null ? (int)$r['max_users'] : null,
+            'expires_on'   => $r['expires_on'] !== null ? (string)$r['expires_on'] : null,
             'tag_ids'      => $r['tag_ids'] !== null && $r['tag_ids'] !== '' ? array_map('intval', explode(',', (string)$r['tag_ids'])) : [],
             'tag_names'    => (string)($r['tag_names'] ?? ''),
             'active_users' => (int)$r['active_users'],

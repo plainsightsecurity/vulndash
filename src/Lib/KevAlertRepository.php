@@ -29,7 +29,7 @@ class KevAlertRepository
         $rows = Database::getConnection()->query(
             "SELECT id, username, email, is_admin, kev_alert_baseline_at
              FROM users
-             WHERE is_active = 1 AND " . UserRepository::ORG_ACTIVE_CONDITION . " AND kev_alerts = 1 AND email <> ''
+             WHERE is_active = 1 AND " . UserRepository::ORG_ACTIVE_CONDITION . " AND " . UserRepository::ACCESS_NOT_EXPIRED_CONDITION . " AND kev_alerts = 1 AND email <> ''
              ORDER BY id"
         )->fetchAll();
 

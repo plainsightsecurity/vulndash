@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../src/bootstrap.php';
 
 use VulnDash\Lib\AgentInstall;
+use VulnDash\Lib\AccessExpiry;
 use VulnDash\Lib\AuditLog;
 use VulnDash\Lib\Auth;
 use VulnDash\Lib\Config;
@@ -251,6 +252,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'error'
                     );
                 }
+                break;
+
+            case 'set_access_until':
+                // Optional last day of access - see src/Lib/AccessExpiry.php.
+                // Blank clears it. Renewing = moving it on (or clearing it),
+                // which restores access straight away.
+                $userId = (int)($_POST['user_id'] ?? 0);
+                $user   = UserRepository::getUser($userId);
+                if (!$user) {
+                    throw new \RuntimeException('That account no longer exists.');
+                }
+                if ($user['is_admin']) {
+                    throw new \RuntimeException("Admin accounts don't have an access end date.");
+                }
+                $date = AccessExpiry::parse((string)($_POST['expires_on'] ?? ''));
+                if ($date === $user['expires_on']) {
+                    Helpers::setFlash("No change - {$user['username']}'s access end date is already " . ($date === null ? 'not set' : AccessExpiry::display($date)) . '.');
+                    break;
+                }
+                UserRepository::setExpiresOn($userId, $date);
+                AuditLog::record('admin.user_access_until', $auditTarget($userId) + ['details' => [
+                    'before' => $user['expires_on'], 'after' => $date,
+                ]]);
+                $orgDate = null;
+                if ($user['organisation_id'] !== null) {
+                    $orgDate = OrganisationRepository::get((int)$user['organisation_id'])['expires_on'] ?? null;
+                }
+                $effective = AccessExpiry::effective($date, $orgDate, false);
+                $msg = $date === null
+                    ? "{$user['username']} no longer has an end date of their own."
+                    : "{$user['username']}'s access now ends after " . AccessExpiry::display($date) . '.';
+                if ($effective !== $date) {
+                    $msg .= ' Their organisation\'s date (' . AccessExpiry::display((string)$effective) . ') is earlier, so that one applies.';
+                }
+                if (AccessExpiry::isExpired($effective)) {
+                    $msg .= ' That date has passed, so they are signed out and can\'t sign in.';
+                }
+                Helpers::setFlash($msg);
                 break;
 
             case 'toggle_admin':
@@ -719,7 +758,9 @@ bjones,bob.jones@wavehill.co.uk,Wavehill Ltd,Wavehill-DMZ,no</pre>
                 $userDevices = $trustedDevicesByUser[(int)$u['id']] ?? [];
             ?>
             <tr class="user-row<?= $u['is_active'] ? '' : ' user-inactive' ?>">
-                <td class="nowrap"><?= Helpers::e($u['username']) ?><?= (int)$u['id'] === $currentUserId ? ' <span class="checkbox-hint">(you)</span>' : '' ?><?php if (!$u['is_active']): // active is the norm, so only the exception is shown ?> <span class="badge badge-inactive">Inactive</span><?php endif; ?></td>
+                <td class="nowrap"><?= Helpers::e($u['username']) ?><?= (int)$u['id'] === $currentUserId ? ' <span class="checkbox-hint">(you)</span>' : '' ?><?php if (!$u['is_active']): // active is the norm, so only the exception is shown ?> <span class="badge badge-inactive">Inactive</span><?php endif; ?><?php
+                    $uAccessUntil = AccessExpiry::effective($u['expires_on'], $u['organisation_expires_on'], (bool)$u['is_admin']);
+                    if ($uAccessUntil !== null): ?> <span class="badge <?= AccessExpiry::isExpired($uAccessUntil) ? 'badge-danger' : (AccessExpiry::isEnding($uAccessUntil) ? 'badge-warn' : 'badge-neutral') ?>" title="<?= Helpers::e('Last day of access: ' . AccessExpiry::display($uAccessUntil) . ($u['expires_on'] !== null && $u['expires_on'] === $uAccessUntil ? ' (set on this account)' : ' (from the organisation)')) ?>"><?= AccessExpiry::isExpired($uAccessUntil) ? 'Expired' : 'Until ' . Helpers::e(date('j M Y', (int)strtotime($uAccessUntil))) ?></span><?php endif; ?></td>
                 <td><?= Helpers::e($u['email']) ?></td>
                 <td class="nowrap">
                     <span class="badge <?= $u['is_admin'] ? 'badge-accent' : 'badge-neutral' ?>"><?= $u['is_admin'] ? 'Admin' : 'Client' ?></span>
@@ -814,6 +855,24 @@ bjones,bob.jones@wavehill.co.uk,Wavehill Ltd,Wavehill-DMZ,no</pre>
                                     </label>
                                     <button type="submit" class="btn btn-sm btn-secondary">Save</button>
                                 </div>
+                            </form>
+                        </div>
+                        <?php endif; ?>
+
+                        <?php if (!$u['is_admin']): ?>
+                        <div class="user-manage-group">
+                            <h3>Access until</h3>
+                            <form method="post" class="user-manage-stack">
+                                <input type="hidden" name="action" value="set_access_until">
+                                <input type="hidden" name="user_id" value="<?= (int)$u['id'] ?>">
+                                <input type="hidden" name="csrf_token" value="<?= Helpers::e($csrfToken) ?>">
+                                <div class="user-manage-inline">
+                                    <input type="date" name="expires_on" value="<?= Helpers::e((string)($u['expires_on'] ?? '')) ?>"
+                                        aria-label="Last day of access for <?= Helpers::e($u['username']) ?>">
+                                    <button type="submit" class="btn btn-sm btn-secondary">Save</button>
+                                </div>
+                                <span class="checkbox-hint">Last day they can sign in; blank = no end<?php
+                                    if ($u['organisation_expires_on'] !== null): ?>. Organisation: until <?= Helpers::e(AccessExpiry::display((string)$u['organisation_expires_on'])) ?> - the earlier date applies<?php endif; ?>.</span>
                             </form>
                         </div>
                         <?php endif; ?>

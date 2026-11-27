@@ -58,6 +58,17 @@ class UserRepository
      */
     public const ORG_ACTIVE_CONDITION = '(organisation_id IS NULL OR organisation_id IN (SELECT o_a.id FROM organisations o_a WHERE o_a.is_active = 1))';
 
+    /**
+     * WHERE condition (on an unaliased users table) for "access hasn't
+     * expired" - see AccessExpiry for the rules. Used everywhere
+     * ORG_ACTIVE_CONDITION is, so an expired account is treated exactly like
+     * a deactivated one: no sign-in, signed out on its next request, no
+     * emails. Admins never expire. CURDATE() is Europe/London (Database.php
+     * pins the session time zone), matching AccessExpiry::today().
+     */
+    public const ACCESS_NOT_EXPIRED_CONDITION = '(is_admin = 1 OR ((expires_on IS NULL OR expires_on >= CURDATE())
+        AND (organisation_id IS NULL OR organisation_id NOT IN (SELECT o_x.id FROM organisations o_x WHERE o_x.expires_on < CURDATE()))))';
+
     /** Filter value for listUsers()'s $tagFilter: accounts with no tags at all. */
     public const TAG_FILTER_NONE = 'none';
 
@@ -108,6 +119,8 @@ class UserRepository
                    u.organisation_id, u.is_org_admin,
                    (SELECT o.name FROM organisations o WHERE o.id = u.organisation_id) AS organisation_name,
                    (SELECT o.is_active FROM organisations o WHERE o.id = u.organisation_id) AS organisation_active,
+                   u.expires_on,
+                   (SELECT o.expires_on FROM organisations o WHERE o.id = u.organisation_id) AS organisation_expires_on,
                    GROUP_CONCAT(t.name ORDER BY t.name SEPARATOR ', ') AS tag_names,
                    (SELECT COUNT(*) FROM user_trusted_devices td
                     WHERE td.user_id = u.id AND td.revoked_at IS NULL AND td.expires_at > NOW()) AS trusted_device_count
@@ -132,7 +145,7 @@ class UserRepository
         $pdo = Database::getConnection();
         $stmt = $pdo->prepare(
             'SELECT id, username, email, is_admin, is_active, mfa_enabled, mfa_confirmed_at, last_login_at,
-                    organisation_id, is_org_admin
+                    organisation_id, is_org_admin, expires_on
              FROM users WHERE id = :id'
         );
         $stmt->execute(['id' => $id]);
@@ -157,7 +170,7 @@ class UserRepository
         // prepared statement protocol doesn't allow one named placeholder
         // to appear more than once in a single query.
         $stmt = Database::getConnection()->prepare(
-            'SELECT id, username, email, (is_active = 1 AND ' . self::ORG_ACTIVE_CONDITION . ') AS is_active FROM users
+            'SELECT id, username, email, (is_active = 1 AND ' . self::ORG_ACTIVE_CONDITION . ' AND ' . self::ACCESS_NOT_EXPIRED_CONDITION . ') AS is_active FROM users
              WHERE username = :identifier1 OR email = :identifier2 LIMIT 1'
         );
         $stmt->execute(['identifier1' => $identifier, 'identifier2' => $identifier]);
@@ -279,21 +292,26 @@ class UserRepository
         $stmt = Database::getConnection()->prepare(
             'SELECT u.session_epoch, u.is_active, u.is_admin, u.can_uninstall_agents, u.organisation_id, u.is_org_admin,
                     (u.organisation_id IS NULL OR o.is_active = 1) AS org_active,
+                    u.expires_on, o.expires_on AS org_expires_on,
                     GROUP_CONCAT(DISTINCT e.tag_id) AS tag_ids
              FROM users u
              LEFT JOIN organisations o ON o.id = u.organisation_id
              LEFT JOIN ' . self::EFFECTIVE_TAGS_SQL . ' e ON e.user_id = u.id
              WHERE u.id = :id
-             GROUP BY u.id, o.is_active'
+             GROUP BY u.id, o.is_active, o.expires_on'
         );
         $stmt->execute(['id' => $userId]);
         $row = $stmt->fetch();
         if (!$row) {
             return null;
         }
+        $accessUntil = AccessExpiry::effective($row['expires_on'], $row['org_expires_on'], (int)$row['is_admin'] === 1);
+        $expired = AccessExpiry::isExpired($accessUntil);
         return [
             'session_epoch' => (int)$row['session_epoch'],
-            'is_active'     => (int)$row['is_active'] === 1 && (int)$row['org_active'] === 1,
+            'is_active'     => (int)$row['is_active'] === 1 && (int)$row['org_active'] === 1 && !$expired,
+            'access_until'  => $accessUntil,
+            'expired'       => $expired,
             'organisation_id' => $row['organisation_id'] !== null ? (int)$row['organisation_id'] : null,
             'is_org_admin'  => (int)$row['is_org_admin'] === 1 && $row['organisation_id'] !== null,
             'is_admin'      => (int)$row['is_admin'] === 1,
@@ -568,6 +586,13 @@ class UserRepository
         Database::getConnection()
             ->prepare('UPDATE users SET can_uninstall_agents = :v WHERE id = :id')
             ->execute(['v' => $canUninstall ? 1 : 0, 'id' => $userId]);
+    }
+
+    /** Sets (or clears, with null) an account's own access end date - see AccessExpiry. */
+    public static function setExpiresOn(int $id, ?string $date): void
+    {
+        Database::getConnection()->prepare('UPDATE users SET expires_on = :d WHERE id = :id')
+            ->execute(['d' => $date, 'id' => $id]);
     }
 
     public static function setActive(int $userId, bool $isActive): void

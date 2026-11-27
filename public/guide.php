@@ -457,6 +457,7 @@ require __DIR__ . '/../src/views/header.php';
     <p>To find someone, type part of their username or email in the <strong>Search</strong> box above the Users table, or pick a <strong>Tag</strong> to list only the accounts that carry it (<em>No tags</em> lists client accounts that would see nothing). The two combine, and the list stays filtered after you make a change.</p>
     <p>Press <strong>Manage</strong> on a user's row to open their actions:</p>
     <ul>
+        <li><strong>Access until</strong> - an optional last day this account can sign in, for a client outside an organisation or one person who should finish earlier. If their organisation also has a date, the earlier one applies. Admin accounts never expire.</li>
         <li><strong>Email</strong> - correct their email address. Tick the box to send a password link to the new address at the same time: a setup link if they've never signed in, otherwise a reset link.</li>
         <li><strong>Access</strong> - edit tags, make or remove admin, grant or revoke agent uninstall.</li>
         <li><strong>Password</strong> - <strong>Email reset link</strong> so they choose their own, or set one for them (12+ characters).</li>
@@ -491,6 +492,7 @@ require __DIR__ . '/../src/views/header.php';
     <p>Account menu &rarr; <strong>Organisations</strong>. An organisation groups a client's accounts and the tags they all see: every member sees the organisation's tags, plus any <em>extra tags</em> set on them individually in Manage Users. Change the organisation's tags and everyone's access changes on their next click.</p>
     <ul>
         <li><strong>User limit</strong> - the most <em>active</em> accounts the organisation can have. It stops its organisation admins inviting or reactivating past it; you can still go over it yourself. Leave blank for no limit.</li>
+        <li><strong>Access until</strong> - optional last day the organisation's members can sign in, e.g. the CE+ certificate's expiry. The day after, they're signed out and can't sign in or get emails, as if suspended. In the last 30 days members see a banner saying when their access ends, and you get an email; you get another when it ends. To renew, move the date on (or clear it) and access returns straight away.</li>
         <li><strong>Suspend</strong> - every member is signed out, can't sign in and gets no emails until you reactivate it.</li>
         <li><strong>Delete</strong> - members stay, without an organisation, keeping only their own extra tags.</li>
         <li><strong>Members</strong> - opens Manage Users filtered to that organisation.</li>

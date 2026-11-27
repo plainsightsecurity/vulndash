@@ -503,6 +503,24 @@ there is no backlog email. Needs
 
 `--dry-run` shows who would be emailed without sending or recording anything.
 
+**Access end dates.** An organisation (Admin > Organisations) and an
+individual client account (Manage Users > Manage) can each have an optional
+**Access until** date - the last day of access, inclusive, e.g. the client's
+CE+ expiry. A member gets the earlier of the two; admin accounts never
+expire. From the day after, the account is treated as deactivated: sign-in
+is refused with a message giving the date (only after the right password),
+an open session ends on its next request, and it gets no emails. Moving the
+date on or clearing it restores access at once. In the last 30 days the
+client sees a banner on every page, and `scripts/send_expiry_alerts.php`
+emails admins once then, and once more when access ends. Rules in
+`src/Lib/AccessExpiry.php`; needs
+`database/migrations/2026-11-27-add-access-expiry.sql`. Makes no Qualys API
+calls.
+
+```cron
+5 7 * * * php /var/www/dashboard.plainsightsecurity.co.uk/scripts/send_expiry_alerts.php >> /var/log/vulndash/expiry_alerts.log 2>&1
+```
+
 **Sync failure emails.** `scripts/send_sync_alerts.php` emails admins
 (`alerts.admin_emails`, else every active admin) when the Knowledge Base or
 host detection sync has **failed**, is **stuck** (a run still "running" after
