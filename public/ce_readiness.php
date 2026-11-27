@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../src/bootstrap.php';
+require_once __DIR__ . '/../src/views/access_until.php';
 
 use VulnDash\Lib\AuditLog;
 use VulnDash\Lib\Auth;
@@ -127,6 +128,7 @@ foreach ($summaryTags as $tag) {
     $date = $assessDates[$tid] ?? null;
     $upcoming = $date !== null && $date >= $today;
     $s = ['id' => $tid, 'name' => (string)$tag['name'], 'date' => $date, 'upcoming' => $upcoming,
+          'access_until' => $tag['expires_on'] ?? null,
           'hosts' => 0, 'fail' => 0, 'at_risk' => 0, 'pass' => 0, 'projected_fail' => null];
     foreach (array_unique($assetIdsByTag[$tid] ?? []) as $aid) {
         if (!isset($hosts[$aid])) {
@@ -209,6 +211,7 @@ require __DIR__ . '/../src/views/header.php';
             <?php endforeach; ?>
         </select>
     </label>
+    <?php render_view_tag_access_until($availableTags, $viewTagId); ?>
     <?php endif; ?>
     <input type="hidden" name="status" value="<?= Helpers::e($statusFilter) ?>">
     <noscript><button type="submit" class="btn btn-secondary">Apply</button></noscript>
@@ -280,6 +283,7 @@ require __DIR__ . '/../src/views/header.php';
                 <th class="col-num">Passing</th>
                 <th>Assessment date</th>
                 <th class="col-num" title="Hosts projected to fail on the assessment date if nothing more is patched">Projected to fail</th>
+                <th title="Last day this tag's assets can be seen on the dashboard">Access until</th>
             </tr>
         </thead>
         <tbody>
@@ -309,13 +313,14 @@ require __DIR__ . '/../src/views/header.php';
                     <?php endif; ?>
                 </td>
                 <td class="col-num mono"><?= $s['projected_fail'] !== null ? number_format($s['projected_fail']) : '—' ?></td>
+                <td class="nowrap"><?php render_access_until($s['access_until']); ?></td>
             </tr>
             <?php endforeach; ?>
         </tbody>
     </table>
     </div>
     <?php if ($isAdmin): ?>
-    <p class="readiness-note">Clear the date and save to remove it. Every account with access to the tag sees its date.</p>
+    <p class="readiness-note">Clear the date and save to remove it. Every account with access to the tag sees its date. Access end dates are set in the Tags table on <a href="/admin/users#tags">Manage Users</a>.</p>
     <?php endif; ?>
 </div>
 <?php endif; ?>

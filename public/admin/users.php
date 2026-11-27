@@ -1034,7 +1034,7 @@ bjones,bob.jones@wavehill.co.uk,Wavehill Ltd,Wavehill-DMZ,no</pre>
                         </form>
                         <?php if (($tag['expires_on'] ?? null) !== null): ?>
                             <?php if (AccessExpiry::isExpired($tag['expires_on'])): ?><span class="badge badge-danger">Ended</span>
-                            <?php elseif (AccessExpiry::isEnding($tag['expires_on'])): ?><span class="badge badge-warn"><?= AccessExpiry::daysLeft($tag['expires_on']) ?>d left</span><?php endif; ?>
+                            <?php elseif (AccessExpiry::isEnding($tag['expires_on'])): ?><span class="badge badge-warn"><?= Helpers::e(AccessExpiry::leftLabel($tag['expires_on'])) ?></span><?php endif; ?>
                         <?php endif; ?>
                     </td>
                     <td class="mono"><?= $tagUserCount ?></td>

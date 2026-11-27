@@ -61,7 +61,7 @@ final class AccessExpiryAlerts
             } elseif (AccessExpiry::isEnding($t['expires_on'], $today) && empty($done['ending'])) {
                 $left = AccessExpiry::daysLeft($t['expires_on'], $today);
                 $lines[] = "{$label}: access ends after " . AccessExpiry::display($t['expires_on'])
-                    . ($left === 1 ? ' - today is the last day.' : " - {$left} days left.");
+                    . ($left === 0 ? ' - today is the last day.' : ' - in ' . $left . ($left === 1 ? ' day.' : ' days.'));
                 $done['ending'] = $today;
             }
             if ($done !== []) {

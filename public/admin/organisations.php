@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../src/bootstrap.php';
 require_once __DIR__ . '/../../src/views/tag_combo.php';
+require_once __DIR__ . '/../../src/views/access_until.php';
 
 use VulnDash\Lib\AuditLog;
 use VulnDash\Lib\Auth;
@@ -177,8 +178,11 @@ require __DIR__ . '/../../src/views/header.php';
             <tr>
                 <td><strong><?= Helpers::e($org['name']) ?></strong></td>
                 <td>
-                    <?php if ($org['tag_names'] !== ''): ?>
-                    <div class="tag-chip-list"><?php foreach (explode(', ', $org['tag_names']) as $t): ?><span class="tag-chip"><?= Helpers::e($t) ?></span><?php endforeach; ?></div>
+                    <?php if ($org['tag_names'] !== ''):
+                        // Each tag with its access end date, if it has one (src/views/access_until.php).
+                        $orgTagRows = array_values(array_filter($tags, static fn (array $t): bool => in_array((int)$t['id'], $org['tag_ids'], true)));
+                    ?>
+                    <div class="tag-chip-list"><?php foreach ($orgTagRows as $t): ?><span class="nowrap"><span class="tag-chip"><?= Helpers::e($t['name']) ?></span><?php if (($t['expires_on'] ?? null) !== null): ?> <span class="checkbox-hint">until</span> <?php render_access_until((string)$t['expires_on'], ''); endif; ?></span><?php endforeach; ?></div>
                     <?php else: ?><span class="no-tags">none - members see only their own extra tags</span><?php endif; ?>
                 </td>
                 <td class="mono">

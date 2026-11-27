@@ -13,6 +13,8 @@ use VulnDash\Lib\Config;
 use VulnDash\Lib\Helpers;
 use VulnDash\Lib\UserRepository;
 
+require_once __DIR__ . '/access_until.php';
+
 $appName = Config::get('app.name') ?? 'Vulnerability Management Dashboard';
 ?>
 <!DOCTYPE html>

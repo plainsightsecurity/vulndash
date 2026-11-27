@@ -516,7 +516,10 @@ is locked out: a client with no live tags left signs in to an empty view
 with a notice. Clients see a notice in a tag's last 30 days and for 30 days
 after it ends. `scripts/send_expiry_alerts.php` emails admins once in the
 last 30 days and once when it ends. Moving the date on or clearing it
-restores access at once. Rules in `src/Lib/AccessExpiry.php`; needs
+restores access at once. The date is always visible: an "Access until"
+column on CE+ Readiness, a label beside the Tags drop-down on every page when
+one tag is being viewed, and on Agent Setup and Organisations
+(`src/views/access_until.php`). Rules in `src/Lib/AccessExpiry.php`; needs
 `database/migrations/2026-11-27-tag-access-expiry.sql` (which also removes
 the short-lived account/organisation end date columns). Makes no Qualys API
 calls.

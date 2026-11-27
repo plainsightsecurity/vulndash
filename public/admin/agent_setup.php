@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../../src/bootstrap.php';
+require_once __DIR__ . '/../../src/views/access_until.php';
 require_once __DIR__ . '/../../scripts/lib/QualysApiClient.php';
 
 use VulnDash\Lib\AgentProvisioner;
@@ -222,16 +223,16 @@ require __DIR__ . '/../../src/views/header.php';
     <div class="table-wrap">
     <table class="vuln-table admin-table">
         <thead>
-            <tr><th>Organisation</th><th>Tag</th><th>Activation ID</th><th>Status</th></tr>
+            <tr><th>Organisation</th><th>Tag</th><th>Activation ID</th><th title="Last day client accounts can see this tag's assets - set in the Tags table on Manage Users">Access until</th><th>Status</th></tr>
         </thead>
         <tbody>
             <?php if ($orgs === []): ?>
-            <tr class="empty-row"><td colspan="4">No organisations yet - add one on <a href="/admin/organisations">Organisations</a> first.</td></tr>
+            <tr class="empty-row"><td colspan="5">No organisations yet - add one on <a href="/admin/organisations">Organisations</a> first.</td></tr>
             <?php else: foreach ($orgs as $org): $s = $org['setup']; ?>
             <tr>
                 <td><strong><?= Helpers::e($org['name']) ?></strong></td>
                 <?php if ($s === null && $org['linkable'] !== []): ?>
-                <td colspan="3">
+                <td colspan="4">
                     <div class="checkbox-hint">Already has a tag with an activation ID - record it rather than create another:</div>
                     <div class="actions-cell">
                         <?php foreach ($org['linkable'] as $t): ?>
@@ -247,7 +248,7 @@ require __DIR__ . '/../../src/views/header.php';
                     <div class="checkbox-hint mono"><?php foreach ($org['linkable'] as $t): ?><?= Helpers::e($t['name']) ?>: tag <?= Helpers::e($t['qualys_tag_id']) ?>, <?= Helpers::e($t['activation_id']) ?><br><?php endforeach; ?></div>
                 </td>
                 <?php elseif ($s === null): $suggested = AgentProvisioner::suggestTagName($org['name']); ?>
-                <td colspan="3">
+                <td colspan="4">
                     <?php if ($org['tags'] !== []): ?>
                     <div class="checkbox-hint">Its current tags (<?= Helpers::e(implode(', ', array_column($org['tags'], 'name'))) ?>) have no activation ID, so this adds a new tag alongside them.</div>
                     <?php endif; ?>
@@ -264,6 +265,7 @@ require __DIR__ . '/../../src/views/header.php';
                 <?php else: ?>
                 <td class="mono"><?= Helpers::e($s['tag_name']) ?><?php if ($s['qualys_tag_id'] !== null): ?><div class="checkbox-hint">Qualys tag <?= $s['qualys_tag_id'] ?></div><?php endif; ?></td>
                 <td class="mono"><?= $s['activation_key'] !== null ? Helpers::e($s['activation_key']) . '<div class="checkbox-hint">Key ' . $s['activation_key_id'] . '</div>' : '-' ?></td>
+                <td class="nowrap"><?php render_access_until($s['tag_expires_on'], $s['local_tag_id'] !== null ? 'No end date' : '-'); ?></td>
                 <td>
                     <?php if ($s['status'] === 'complete'): ?>
                     <span class="badge badge-active"><?= $s['origin'] === 'linked' ? 'Linked' : 'Set up' ?></span>

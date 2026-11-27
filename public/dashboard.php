@@ -391,6 +391,7 @@ $postureTagSuffix = $viewTagId !== null ? ' in this tag' : '';
             <?php endforeach; ?>
         </select>
     </label>
+    <?php render_view_tag_access_until($availableTags, $viewTagId); ?>
     <noscript><button type="submit" class="btn btn-secondary">Apply</button></noscript>
 </form>
 <?php endif; ?>

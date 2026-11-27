@@ -50,9 +50,11 @@ function expiry_mail(callable $fn): array
 test('rules: last day inclusive, notices, dates validated', function () {
     $t = '2027-03-01';
     ok(!AccessExpiry::isExpired('2027-03-01', $t) && AccessExpiry::isExpired('2027-02-28', $t), 'inclusive');
-    eq([AccessExpiry::daysLeft('2027-03-01', $t), AccessExpiry::daysLeft('2027-03-30', $t), AccessExpiry::daysSinceEnded('2027-02-28', $t)], [1, 30, 1]);
-    eq(AccessExpiry::notice('Acme', '2027-03-31', true, $t), null, '31 days out: nothing');
-    eq(AccessExpiry::notice('Acme', '2027-03-30', true, $t), 'Access to Acme ends on Tue 30 Mar 2027 (in 30 days). To keep it, contact Plainsight Security about renewing.');
+    eq([AccessExpiry::daysLeft('2027-03-01', $t), AccessExpiry::daysLeft('2027-03-02', $t), AccessExpiry::daysLeft('2027-03-31', $t), AccessExpiry::daysSinceEnded('2027-02-28', $t)], [0, 1, 30, 1]);
+    eq([AccessExpiry::leftLabel('2027-03-01', $t), AccessExpiry::leftLabel('2027-03-13', $t)], ['Last day', '12d left']);
+    eq(AccessExpiry::notice('Acme', '2027-04-01', true, $t), null, '31 days out: nothing');
+    eq(AccessExpiry::notice('Acme', '2027-03-31', true, $t), 'Access to Acme ends on Wed 31 Mar 2027 (in 30 days). To keep it, contact Plainsight Security about renewing.');
+    ok(str_contains((string)AccessExpiry::notice('Acme', '2027-03-02', true, $t), '(in 1 day)'), 'singular');
     eq(AccessExpiry::notice('Acme', '2027-03-01', true, $t), 'Access to Acme ends today. To keep it, contact Plainsight Security about renewing.');
     eq(AccessExpiry::notice('Acme', '2027-02-28', true, $t), 'Access to Acme ended on Sun 28 Feb 2027. To renew it, contact Plainsight Security.');
     eq(AccessExpiry::notice('Acme', '2027-01-01', true, $t), null, 'ended long ago, other tags still live: dropped');
@@ -125,7 +127,7 @@ test('notices: in the last 30 days, per tag, for clients and view-as only', func
     tag_ends(1, day_offset(9));
     tag_ends(2, day_offset(-1));
     $page = render_page('dashboard.php', '', 'client');
-    ok(str_contains($page, 'Access to ClientA ends on ' . AccessExpiry::display(day_offset(9)) . ' (in 10 days)'), 'ending');
+    ok(str_contains($page, 'Access to ClientA ends on ' . AccessExpiry::display(day_offset(9)) . ' (in 9 days)'), 'ending');
     ok(str_contains($page, 'Access to ClientB ended on'), 'ended, still within 30 days');
     ok(str_contains(render_page('dashboard.php', '', 'as_client'), 'Access to ClientA ends on'), 'admin viewing as sees it');
     ok(!str_contains(render_page('dashboard.php', '', 'admin'), 'access-ending-bar'), 'never for the admin themselves');
@@ -133,11 +135,23 @@ test('notices: in the last 30 days, per tag, for clients and view-as only', func
 
 test('no KEV email for an ended tag\'s assets', function () {
     seed_estate();
-    run_kev_alerts();                     // baseline (from KevAlertTest.php)
+    $run = function (): array {
+        [, $mails] = expiry_mail(function () {
+            $proc = proc_open([PHP_BINARY, __DIR__ . '/../../scripts/send_kev_alerts.php'], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+            stream_get_contents($pipes[1]);
+            stream_get_contents($pipes[2]);
+            proc_close($proc);
+        });
+        return $mails;
+    };
+    $run();                               // baseline
     tag_ends(1, day_offset(-1));
-    new_kev_finding(1, 6001);             // host-a, ClientA
-    [, , $mails] = run_kev_alerts();
-    eq(array_column($mails, 'to'), ['admin@test'], 'admin only - the client no longer sees ClientA');
+    $pdo = Database::getConnection();     // a new KEV finding on host-a (ClientA)
+    $pdo->exec("INSERT INTO knowledge_base (qid, title, severity_level, cvss3_base) VALUES (6001, 'New exploited thing', 5, 9.1)");
+    $pdo->exec('INSERT INTO qid_exploit (qid, is_kev, cve_count) VALUES (6001, 1, 1)');
+    $pdo->exec("INSERT INTO host_detections (asset_id, qid, status, first_found, last_found, times_found, effective_cvss_score, effective_cvss_source, is_ce_plus_fail)
+                VALUES (1, 6001, 'New', NOW(), NOW(), 1, 9.1, 'CVSS3', 1)");
+    eq(array_column($run(), 'to'), ['admin@test'], 'admin only - the client no longer sees ClientA');
 });
 
 test('Tags table: set, clear and reject an end date; badges; audit; admin only', function () {
@@ -148,7 +162,7 @@ test('Tags table: set, clear and reject an end date; badges; audit; admin only',
     $date = fn () => Database::getConnection()->query('SELECT expires_on FROM tags WHERE id = 1')->fetchColumn();
     eq($date(), $d);
     $page = render_page('admin/users.php', '', 'admin');
-    ok(str_contains($page, 'name="expires_on" value="' . $d . '"') && str_contains($page, '21d left'), 'shown with days left');
+    ok(str_contains($page, 'name="expires_on" value="' . $d . '"') && str_contains($page, '20d left'), 'shown with days left');
 
     render_page('admin/users.php', '', 'admin', 'action=set_tag_access_until&tag_id=1&expires_on=2027-02-30');
     eq($date(), $d, 'invalid date rejected');
@@ -168,9 +182,9 @@ test('admin emails: 30 days before, once; when it ends, once; a new date starts 
     [$r, $mails] = expiry_mail(fn () => AccessExpiryAlerts::check('2027-01-29'));
     eq([$r['lines'], count($mails)], [[], 0], 'too early');
 
-    [$r, $mails] = expiry_mail(fn () => AccessExpiryAlerts::check('2027-01-31'));
+    [$r, $mails] = expiry_mail(fn () => AccessExpiryAlerts::check('2027-01-30'));
     eq(count($r['lines']), 1);
-    ok(str_contains($r['lines'][0], 'ClientA (1 client account): access ends after Mon 1 Mar 2027 - 30 days left'), $r['lines'][0]);
+    ok(str_contains($r['lines'][0], 'ClientA (1 client account): access ends after Mon 1 Mar 2027 - in 30 days.'), $r['lines'][0]);
     eq(array_column($mails, 'to'), ['admin@test'], 'admins only');
     ok(str_contains($mails[0]['subject'], 'client access ending') && str_contains($mails[0]['text'], '/admin/users#tags'), 'subject and link');
     eq(expiry_mail(fn () => AccessExpiryAlerts::check('2027-02-15'))[0]['lines'], [], 'not repeated');
@@ -182,7 +196,7 @@ test('admin emails: 30 days before, once; when it ends, once; a new date starts 
 
     tag_ends(1, '2028-03-01');            // renewed
     [$r] = expiry_mail(fn () => AccessExpiryAlerts::check('2028-02-01'));
-    ok(count($r['lines']) === 1 && str_contains($r['lines'][0], '30 days left'), 'new date warned afresh');
+    ok(count($r['lines']) === 1 && str_contains($r['lines'][0], 'in 29 days'), 'new date warned afresh');
 });
 
 test('admin emails: dry run saves nothing; a missed send is retried; the script runs', function () {
@@ -205,4 +219,41 @@ test('admin emails: dry run saves nothing; a missed send is retried; the script 
     $sentLines = count(array_filter(explode("\n", (string)file_get_contents($log))));
     unlink($log);
     ok($code === 0 && $sentLines === 1 && str_contains($out, 'Emailed: admin@test'), 'retried by the script: ' . $out);
+});
+
+test('the date is always shown: CE+ Readiness, beside the Tags drop-down, Agent Setup, Organisations', function () {
+    seed_estate();
+    $d = day_offset(60);
+    $shown = date('j M Y', strtotime($d));
+    tag_ends(1, $d);
+
+    $page = render_page('ce_readiness.php', '', 'client');
+    ok(!str_contains($page, 'PHPERR'), $page);
+    ok(str_contains($page, '>Access until</th>') && str_contains($page, $shown), 'CE+ Readiness column');
+    ok(!str_contains($page, 'd left</span>'), 'no countdown badge outside the last 30 days');
+    $admin = render_page('ce_readiness.php', '', 'admin');
+    ok(str_contains($admin, 'No end date'), 'a tag without a date says so');
+
+    ok(str_contains(render_page('dashboard.php', '', 'client'), 'filter-bar-access">Access until <span class="mono"'), "client's only tag: label beside the drop-down");
+    foreach (['assets.php', 'vulnerabilities.php', 'reports.php', 'trends.php', 'top_fixes.php', 'search.php', 'ce_readiness.php'] as $p) {
+        $out = render_page($p, '', 'client');
+        ok(!str_contains($out, 'PHPERR') && str_contains($out, 'filter-bar-access'), "label on $p");
+    }
+    client_sees_both();
+    ok(!str_contains(render_page('dashboard.php', '', 'client'), 'filter-bar-access'), 'MSP on all tags: no label');
+    ok(str_contains(render_page('dashboard.php', 'view_tag=1', 'client'), 'filter-bar-access'), 'MSP with ClientA selected: label');
+    ok(!str_contains(render_page('dashboard.php', 'view_tag=2', 'client'), 'filter-bar-access'), 'ClientB has no date: no label');
+
+    tag_ends(1, day_offset(9));
+    ok(str_contains(render_page('ce_readiness.php', '', 'client'), '9d left</span>'), 'countdown in the last 30 days');
+
+    $pdo = Database::getConnection();
+    $pdo->exec("INSERT INTO organisations (id, name) VALUES (1, 'Acme')");
+    $pdo->exec('INSERT INTO organisation_tags (organisation_id, tag_id) VALUES (1, 1)');
+    $pdo->exec("INSERT INTO agent_provisioning (organisation_id, tag_name, qualys_tag_id, local_tag_id, status, origin, completed_at)
+                VALUES (1, 'ClientA', '101', 1, 'complete', 'linked', NOW())");
+    $setup = render_page('admin/agent_setup.php', '', 'admin');
+    ok(!str_contains($setup, 'PHPERR') && str_contains($setup, '>Access until</th>') && str_contains($setup, '9d left'), 'Agent Setup column');
+    $orgs = render_page('admin/organisations.php', '', 'admin');
+    ok(!str_contains($orgs, 'PHPERR') && str_contains($orgs, 'until</span>') && str_contains($orgs, '9d left'), 'Organisations tag chips');
 });

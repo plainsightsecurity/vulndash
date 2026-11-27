@@ -192,6 +192,14 @@ html { scrollbar-gutter: stable; }
     margin: 0;
 }
 
+/* "Access until" beside the Tags drop-down (src/views/access_until.php). */
+.filter-bar-access {
+    align-self: flex-end;
+    padding-bottom: 0.55rem;
+    font-size: 0.85rem;
+    color: var(--text-muted, inherit);
+}
+
 /* Tag access end date notices (src/views/header.php). */
 .access-ending-bar {
     background: rgba(201, 154, 58, 0.10);

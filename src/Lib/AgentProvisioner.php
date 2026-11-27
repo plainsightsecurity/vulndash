@@ -138,9 +138,11 @@ final class AgentProvisioner
     {
         $pdo = Database::getConnection();
         $setups = [];
-        foreach ($pdo->query('SELECT ap.*, (SELECT COUNT(*) FROM asset_tags at WHERE at.tag_id = ap.local_tag_id) AS asset_count
+        foreach ($pdo->query('SELECT ap.*, (SELECT COUNT(*) FROM asset_tags at WHERE at.tag_id = ap.local_tag_id) AS asset_count,
+                                     (SELECT t.expires_on FROM tags t WHERE t.id = ap.local_tag_id) AS tag_expires_on
                               FROM agent_provisioning ap')->fetchAll() as $row) {
-            $setups[(int)$row['organisation_id']] = self::shape($row) + ['asset_count' => (int)$row['asset_count']];
+            $setups[(int)$row['organisation_id']] = self::shape($row) + ['asset_count' => (int)$row['asset_count'],
+                                                                          'tag_expires_on' => $row['tag_expires_on'] !== null ? (string)$row['tag_expires_on'] : null];
         }
         $tags = [];
         foreach ($pdo->query('SELECT ot.organisation_id, t.id, t.name, t.qualys_tag_id, t.agent_activation_id,

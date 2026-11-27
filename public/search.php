@@ -148,6 +148,7 @@ require __DIR__ . '/../src/views/header.php';
         </select>
     </label>
     <?php endif; ?>
+    <?php render_view_tag_access_until($availableTags, $viewTagId); ?>
     <button type="submit" class="btn btn-primary">Search</button>
 </form>
 

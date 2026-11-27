@@ -71,12 +71,19 @@ final class AccessExpiry
         return $date !== null && ($today ?? self::today()) > $date;
     }
 
-    /** Days of access left counting today as one: 1 on the last day, 0 once over. */
+    /** Calendar days until the last day: 0 on the last day itself (and once over). */
     public static function daysLeft(string $date, ?string $today = null): int
     {
         $from = new \DateTimeImmutable($today ?? self::today());
         $to = new \DateTimeImmutable($date);
-        return max(0, (int)$from->diff($to)->format('%r%a') + 1);
+        return max(0, (int)$from->diff($to)->format('%r%a'));
+    }
+
+    /** Short badge text: "12d left", or "Last day". */
+    public static function leftLabel(string $date, ?string $today = null): string
+    {
+        $left = self::daysLeft($date, $today);
+        return $left === 0 ? 'Last day' : $left . 'd left';
     }
 
     /** Days since access ended: 1 on the first day without it. */
@@ -113,7 +120,7 @@ final class AccessExpiry
             return null;
         }
         $left = self::daysLeft($date, $today);
-        return "Access to {$tagName} ends " . ($left === 1 ? 'today' : 'on ' . self::display($date) . " (in {$left} days)")
+        return "Access to {$tagName} ends " . ($left === 0 ? 'today' : 'on ' . self::display($date) . ' (in ' . $left . ($left === 1 ? ' day)' : ' days)'))
             . '. To keep it, contact Plainsight Security about renewing.';
     }
 

@@ -95,6 +95,7 @@ require __DIR__ . '/../src/views/header.php';
             <?php endforeach; ?>
         </select>
     </label>
+    <?php render_view_tag_access_until($availableTags, $viewTagId); ?>
     <?php endif; ?>
 
     <label class="field field-inline">
