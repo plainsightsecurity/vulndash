@@ -431,7 +431,7 @@ require __DIR__ . '/../src/views/header.php';
         <dt>EPSS</dt>
         <dd>The estimated chance a vulnerability will be exploited in the next 30 days.</dd>
         <dt>KEV</dt>
-        <dd>The CISA Known Exploited Vulnerabilities catalogue: vulnerabilities attackers are confirmed to be using. A <em>Ransomware</em> label means it's linked to ransomware campaigns.</dd>
+        <dd>The CISA Known Exploited Vulnerabilities catalogue: vulnerabilities attackers are confirmed to be using. If it's linked to ransomware campaigns, the KEV badge on the finding's detail page reads <em>KEV &middot; Ransomware</em>; on the Vulnerabilities and Top fixes lists, hover over the KEV badge to see it.</dd>
         <dt>CE+</dt>
         <dd>Cyber Essentials Plus. A finding fails it with a CVSS of 7.0 or above and a fix available, not patched within <?= $patchDays ?> days of the fix's release. End-of-life software always fails.</dd>
         <dt>Potential</dt>
