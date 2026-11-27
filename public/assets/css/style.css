@@ -192,7 +192,7 @@ html { scrollbar-gutter: stable; }
     margin: 0;
 }
 
-/* Access end date banner (src/views/header.php) - the client's last 30 days. */
+/* Tag access end date notices (src/views/header.php). */
 .access-ending-bar {
     background: rgba(201, 154, 58, 0.10);
     border-bottom: 1px solid rgba(201, 154, 58, 0.4);

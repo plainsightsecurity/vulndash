@@ -4,20 +4,16 @@ declare(strict_types=1);
 namespace VulnDash\Lib;
 
 /**
- * Daily admin email about access end dates (2026-11-27, see AccessExpiry),
- * sent by scripts/send_expiry_alerts.php:
+ * Daily admin email about tag access end dates (2026-11-27, see
+ * AccessExpiry), sent by scripts/send_expiry_alerts.php:
  *
- *   - "ending":  an organisation or account enters its last
- *                AccessExpiry::WARN_DAYS days - time to chase the renewal.
- *                Also sent straight away if a date is set inside that window.
- *   - "ended":   the date has passed and its members can no longer sign in.
+ *   - "ending": a tag enters its last AccessExpiry::WARN_DAYS days - time to
+ *               chase the renewal. Also sent straight away if a date is set
+ *               inside that window.
+ *   - "ended":  the date has passed and client accounts no longer see it.
  *
- * Each is sent once per organisation/account per date: move the date on
- * (renewal) and the new one is tracked afresh. Covers active organisations
- * with a date, and active client accounts whose OWN date is the one that
- * applies (earlier than their organisation's, or no organisation date) - an
- * account that just follows its organisation's date is covered by the
- * organisation's line. All of a day's lines go in one email. State in
+ * Each is sent once per tag per date: move the date on (renewal) and the new
+ * one is tracked afresh. All of a day's lines go in one email. State in
  * sync_state 'access_expiry_alerts'; if nobody received the email it isn't
  * advanced, so the next run tries again. Recipients as the other admin
  * alerts (alerts.admin_emails, else every active admin).
@@ -37,55 +33,39 @@ final class AccessExpiryAlerts
         $sent = json_decode((string)$stmt->fetchColumn(), true);
         $sent = is_array($sent) ? $sent : [];
 
-        $items = [];
-        foreach ($pdo->query("
-            SELECT o.id, o.name, o.expires_on,
-                   (SELECT COUNT(*) FROM users u WHERE u.organisation_id = o.id AND u.is_active = 1 AND u.is_admin = 0) AS members
-            FROM organisations o
-            WHERE o.is_active = 1 AND o.expires_on IS NOT NULL
-            ORDER BY o.expires_on, o.name
-        ")->fetchAll() as $r) {
-            $n = (int)$r['members'];
-            $items[] = [
-                'key'   => 'org:' . $r['id'] . ':' . $r['expires_on'],
-                'date'  => (string)$r['expires_on'],
-                'label' => "Organisation {$r['name']} ({$n} active " . ($n === 1 ? 'account' : 'accounts') . ')',
-            ];
-        }
-        foreach ($pdo->query("
-            SELECT u.id, u.username, u.expires_on, o.name AS org_name
-            FROM users u
-            LEFT JOIN organisations o ON o.id = u.organisation_id
-            WHERE u.is_admin = 0 AND u.is_active = 1 AND u.expires_on IS NOT NULL
-              AND (o.id IS NULL OR o.is_active = 1)
-              AND (o.expires_on IS NULL OR u.expires_on < o.expires_on)
-            ORDER BY u.expires_on, u.username
-        ")->fetchAll() as $r) {
-            $items[] = [
-                'key'   => 'user:' . $r['id'] . ':' . $r['expires_on'],
-                'date'  => (string)$r['expires_on'],
-                'label' => "Account {$r['username']}" . ($r['org_name'] !== null ? " ({$r['org_name']})" : ''),
-            ];
-        }
+        // Client accounts that have the tag assigned, their own or via an
+        // active organisation - the people the date affects.
+        $tags = $pdo->query('
+            SELECT t.id, t.name, t.expires_on,
+                   (SELECT COUNT(DISTINCT e.user_id) FROM ' . UserRepository::EFFECTIVE_TAGS_SQL . ' e
+                    JOIN users u ON u.id = e.user_id
+                    WHERE e.tag_id = t.id AND u.is_active = 1 AND u.is_admin = 0) AS accounts
+            FROM tags t
+            WHERE t.expires_on IS NOT NULL
+            ORDER BY t.expires_on, t.name
+        ')->fetchAll();
 
         $lines = [];
-        $next = [];   // state to keep: only items that still exist with the same date
-        foreach ($items as $it) {
-            $done = $sent[$it['key']] ?? [];
-            if (AccessExpiry::isExpired($it['date'], $today)) {
+        $next = [];   // state to keep: only tags that still have the same date
+        foreach ($tags as $t) {
+            $key = $t['id'] . ':' . $t['expires_on'];
+            $done = $sent[$key] ?? [];
+            $n = (int)$t['accounts'];
+            $label = "{$t['name']} ({$n} client " . ($n === 1 ? 'account' : 'accounts') . ')';
+            if (AccessExpiry::isExpired($t['expires_on'], $today)) {
                 if (empty($done['ended'])) {
-                    $lines[] = "{$it['label']}: access ended after " . AccessExpiry::display($it['date'])
-                        . ' - they can no longer sign in. Move the date on to renew, or clear it.';
+                    $lines[] = "{$label}: access ended after " . AccessExpiry::display($t['expires_on'])
+                        . ' - client accounts no longer see its assets. Move the date on to renew, or clear it.';
                     $done['ended'] = $today;
                 }
-            } elseif (AccessExpiry::isEnding($it['date'], $today) && empty($done['ending'])) {
-                $left = AccessExpiry::daysLeft($it['date'], $today);
-                $lines[] = "{$it['label']}: access ends after " . AccessExpiry::display($it['date'])
+            } elseif (AccessExpiry::isEnding($t['expires_on'], $today) && empty($done['ending'])) {
+                $left = AccessExpiry::daysLeft($t['expires_on'], $today);
+                $lines[] = "{$label}: access ends after " . AccessExpiry::display($t['expires_on'])
                     . ($left === 1 ? ' - today is the last day.' : " - {$left} days left.");
                 $done['ending'] = $today;
             }
             if ($done !== []) {
-                $next[$it['key']] = $done;
+                $next[$key] = $done;
             }
         }
 
@@ -95,18 +75,18 @@ final class AccessExpiryAlerts
         }
 
         if ($lines !== []) {
-            $url = rtrim((string)(Config::get('app.base_url') ?? ''), '/') . '/admin/organisations';
-            $footer = 'You get this because you are an admin. Each organisation or account is mentioned '
+            $url = rtrim((string)(Config::get('app.base_url') ?? ''), '/') . '/admin/users#tags';
+            $footer = 'You get this because you are an admin. Each tag is mentioned '
                 . AccessExpiry::WARN_DAYS . ' days before its access ends and once more when it ends. '
-                . 'Clients see a banner over the same ' . AccessExpiry::WARN_DAYS . ' days.';
+                . 'Clients see a notice over the same ' . AccessExpiry::WARN_DAYS . ' days.';
             foreach (ApiBudgetAlerts::recipients() as $email => $name) {
-                if (Mailer::sendAdminAlertEmail($email, $name, 'access ending', $lines, $url, 'Open Organisations',
-                    'These clients\' access is ending or has ended:', $footer)) {
+                if (Mailer::sendAdminAlertEmail($email, $name, 'client access ending', $lines, $url, 'Open Manage Users',
+                    'Client access to these tags is ending or has ended:', $footer)) {
                     $result['sent_to'][] = $email;
                 }
             }
             if ($result['sent_to'] === []) {
-                return $result;   // nobody got it - leave the state, so tomorrow's run tries again
+                return $result;   // nobody got it - leave the state, so the next run tries again
             }
         }
 

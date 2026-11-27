@@ -11,6 +11,7 @@ use VulnDash\Lib\AccessExpiry;
 use VulnDash\Lib\Auth;
 use VulnDash\Lib\Config;
 use VulnDash\Lib\Helpers;
+use VulnDash\Lib\UserRepository;
 
 $appName = Config::get('app.name') ?? 'Vulnerability Management Dashboard';
 ?>
@@ -154,20 +155,23 @@ $appName = Config::get('app.name') ?? 'Vulnerability Management Dashboard';
 </div>
 <?php endif; ?>
 <?php
-// Access end date (AccessExpiry): a client sees this on every page in the
-// last 30 days. Viewing as an account whose access has already ended, the
-// admin is told that instead (the client themselves can't get this far).
-$accessUntil = Auth::accessUntil();
-$accessBanner = null;
-if ($accessUntil !== null && AccessExpiry::isEnding($accessUntil)) {
-    $accessBanner = AccessExpiry::endingMessage($accessUntil);
-} elseif ($accessUntil !== null && Auth::impersonator() !== null && AccessExpiry::isExpired($accessUntil)) {
-    $accessBanner = "This account's access ended on " . AccessExpiry::display($accessUntil) . ' - the client can no longer sign in.';
+// Tag access end dates (AccessExpiry): a client is told when a tag they see
+// is in its last 30 days, or has ended (for 30 days after, or for as long as
+// they have nothing left to see). Admins viewing as a client see the same.
+$accessNotices = [];
+if (!Auth::isAdmin() && !empty($_SESSION['user_id'])) {
+    $hasLiveTags = Auth::tagIds() !== [];
+    foreach (UserRepository::getDatedTags((int)$_SESSION['user_id']) as $datedTag) {
+        $n = AccessExpiry::notice((string)$datedTag['name'], (string)$datedTag['expires_on'], $hasLiveTags);
+        if ($n !== null) {
+            $accessNotices[] = $n;
+        }
+    }
 }
 ?>
-<?php if ($accessBanner !== null): ?>
+<?php if ($accessNotices !== []): ?>
 <div class="access-ending-bar" role="status">
-    <div class="impersonation-bar-inner"><span><?= Helpers::e($accessBanner) ?></span></div>
+    <div class="impersonation-bar-inner"><div><?php foreach ($accessNotices as $n): ?><div><?= Helpers::e($n) ?></div><?php endforeach; ?></div></div>
 </div>
 <?php endif; ?>
 <main class="site-main<?= !empty($wideLayout) ? ' site-main-wide' : '' ?>">

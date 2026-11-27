@@ -52,22 +52,20 @@ class UserRepository
             JOIN organisation_tags ot_e ON ot_e.organisation_id = o_e.id)';
 
     /**
+     * EFFECTIVE_TAGS_SQL minus tags whose access end date has passed
+     * (AccessExpiry) - what an account can actually SEE. Used for the
+     * session's scope and for emails; EFFECTIVE_TAGS_SQL itself stays the
+     * "what is assigned" view for the admin pages.
+     */
+    public const LIVE_TAGS_SQL = '(SELECT e_l.user_id, e_l.tag_id FROM ' . self::EFFECTIVE_TAGS_SQL . ' e_l
+        JOIN tags t_l ON t_l.id = e_l.tag_id WHERE (t_l.expires_on IS NULL OR t_l.expires_on >= CURDATE()))';
+
+    /**
      * WHERE condition (on an unaliased users table) for "not in a suspended
      * organisation". A suspended organisation's members can't sign in, are
      * signed out on their next request and get no emails.
      */
     public const ORG_ACTIVE_CONDITION = '(organisation_id IS NULL OR organisation_id IN (SELECT o_a.id FROM organisations o_a WHERE o_a.is_active = 1))';
-
-    /**
-     * WHERE condition (on an unaliased users table) for "access hasn't
-     * expired" - see AccessExpiry for the rules. Used everywhere
-     * ORG_ACTIVE_CONDITION is, so an expired account is treated exactly like
-     * a deactivated one: no sign-in, signed out on its next request, no
-     * emails. Admins never expire. CURDATE() is Europe/London (Database.php
-     * pins the session time zone), matching AccessExpiry::today().
-     */
-    public const ACCESS_NOT_EXPIRED_CONDITION = '(is_admin = 1 OR ((expires_on IS NULL OR expires_on >= CURDATE())
-        AND (organisation_id IS NULL OR organisation_id NOT IN (SELECT o_x.id FROM organisations o_x WHERE o_x.expires_on < CURDATE()))))';
 
     /** Filter value for listUsers()'s $tagFilter: accounts with no tags at all. */
     public const TAG_FILTER_NONE = 'none';
@@ -119,8 +117,6 @@ class UserRepository
                    u.organisation_id, u.is_org_admin,
                    (SELECT o.name FROM organisations o WHERE o.id = u.organisation_id) AS organisation_name,
                    (SELECT o.is_active FROM organisations o WHERE o.id = u.organisation_id) AS organisation_active,
-                   u.expires_on,
-                   (SELECT o.expires_on FROM organisations o WHERE o.id = u.organisation_id) AS organisation_expires_on,
                    GROUP_CONCAT(t.name ORDER BY t.name SEPARATOR ', ') AS tag_names,
                    (SELECT COUNT(*) FROM user_trusted_devices td
                     WHERE td.user_id = u.id AND td.revoked_at IS NULL AND td.expires_at > NOW()) AS trusted_device_count
@@ -145,7 +141,7 @@ class UserRepository
         $pdo = Database::getConnection();
         $stmt = $pdo->prepare(
             'SELECT id, username, email, is_admin, is_active, mfa_enabled, mfa_confirmed_at, last_login_at,
-                    organisation_id, is_org_admin, expires_on
+                    organisation_id, is_org_admin
              FROM users WHERE id = :id'
         );
         $stmt->execute(['id' => $id]);
@@ -170,7 +166,7 @@ class UserRepository
         // prepared statement protocol doesn't allow one named placeholder
         // to appear more than once in a single query.
         $stmt = Database::getConnection()->prepare(
-            'SELECT id, username, email, (is_active = 1 AND ' . self::ORG_ACTIVE_CONDITION . ' AND ' . self::ACCESS_NOT_EXPIRED_CONDITION . ') AS is_active FROM users
+            'SELECT id, username, email, (is_active = 1 AND ' . self::ORG_ACTIVE_CONDITION . ') AS is_active FROM users
              WHERE username = :identifier1 OR email = :identifier2 LIMIT 1'
         );
         $stmt->execute(['identifier1' => $identifier, 'identifier2' => $identifier]);
@@ -201,7 +197,7 @@ class UserRepository
      */
     public static function getEffectiveTagIds(int $userId): array
     {
-        $stmt = Database::getConnection()->prepare('SELECT DISTINCT tag_id FROM ' . self::EFFECTIVE_TAGS_SQL . ' e WHERE e.user_id = :id');
+        $stmt = Database::getConnection()->prepare('SELECT DISTINCT tag_id FROM ' . self::LIVE_TAGS_SQL . ' e WHERE e.user_id = :id');
         $stmt->execute(['id' => $userId]);
         return array_map('intval', array_column($stmt->fetchAll(), 'tag_id'));
     }
@@ -292,26 +288,21 @@ class UserRepository
         $stmt = Database::getConnection()->prepare(
             'SELECT u.session_epoch, u.is_active, u.is_admin, u.can_uninstall_agents, u.organisation_id, u.is_org_admin,
                     (u.organisation_id IS NULL OR o.is_active = 1) AS org_active,
-                    u.expires_on, o.expires_on AS org_expires_on,
                     GROUP_CONCAT(DISTINCT e.tag_id) AS tag_ids
              FROM users u
              LEFT JOIN organisations o ON o.id = u.organisation_id
-             LEFT JOIN ' . self::EFFECTIVE_TAGS_SQL . ' e ON e.user_id = u.id
+             LEFT JOIN ' . self::LIVE_TAGS_SQL . ' e ON e.user_id = u.id
              WHERE u.id = :id
-             GROUP BY u.id, o.is_active, o.expires_on'
+             GROUP BY u.id, o.is_active'
         );
         $stmt->execute(['id' => $userId]);
         $row = $stmt->fetch();
         if (!$row) {
             return null;
         }
-        $accessUntil = AccessExpiry::effective($row['expires_on'], $row['org_expires_on'], (int)$row['is_admin'] === 1);
-        $expired = AccessExpiry::isExpired($accessUntil);
         return [
             'session_epoch' => (int)$row['session_epoch'],
-            'is_active'     => (int)$row['is_active'] === 1 && (int)$row['org_active'] === 1 && !$expired,
-            'access_until'  => $accessUntil,
-            'expired'       => $expired,
+            'is_active'     => (int)$row['is_active'] === 1 && (int)$row['org_active'] === 1,
             'organisation_id' => $row['organisation_id'] !== null ? (int)$row['organisation_id'] : null,
             'is_org_admin'  => (int)$row['is_org_admin'] === 1 && $row['organisation_id'] !== null,
             'is_admin'      => (int)$row['is_admin'] === 1,
@@ -432,13 +423,13 @@ class UserRepository
     {
         $pdo = Database::getConnection();
         return $pdo->query("
-            SELECT t.id, t.qualys_tag_id, t.name, t.agent_activation_id,
+            SELECT t.id, t.qualys_tag_id, t.name, t.agent_activation_id, t.expires_on,
                    COUNT(DISTINCT ut.user_id) AS user_count,
                    COUNT(DISTINCT at.asset_id) AS asset_count
             FROM tags t
             LEFT JOIN user_tags ut ON ut.tag_id = t.id
             LEFT JOIN asset_tags at ON at.tag_id = t.id
-            GROUP BY t.id, t.qualys_tag_id, t.name, t.agent_activation_id
+            GROUP BY t.id, t.qualys_tag_id, t.name, t.agent_activation_id, t.expires_on
             ORDER BY t.name
         ")->fetchAll();
     }
@@ -463,7 +454,7 @@ class UserRepository
         $pdo = Database::getConnection();
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
         $stmt = $pdo->prepare("
-            SELECT t.id, t.qualys_tag_id, t.name, t.agent_activation_id
+            SELECT t.id, t.qualys_tag_id, t.name, t.agent_activation_id, t.expires_on
             FROM tags t
             WHERE t.id IN ($placeholders)
             ORDER BY t.name
@@ -588,13 +579,6 @@ class UserRepository
             ->execute(['v' => $canUninstall ? 1 : 0, 'id' => $userId]);
     }
 
-    /** Sets (or clears, with null) an account's own access end date - see AccessExpiry. */
-    public static function setExpiresOn(int $id, ?string $date): void
-    {
-        Database::getConnection()->prepare('UPDATE users SET expires_on = :d WHERE id = :id')
-            ->execute(['d' => $date, 'id' => $id]);
-    }
-
     public static function setActive(int $userId, bool $isActive): void
     {
         Database::getConnection()
@@ -707,6 +691,35 @@ class UserRepository
      * public/admin/users.php normalises and validates it first
      * (AgentInstall::normaliseActivationId()).
      */
+    /** Sets (or clears, with null) a tag's access end date - see AccessExpiry. */
+    public static function setTagExpiresOn(int $tagId, ?string $date): void
+    {
+        Database::getConnection()
+            ->prepare('UPDATE tags SET expires_on = :d WHERE id = :id')
+            ->execute(['d' => $date, 'id' => $tagId]);
+    }
+
+    /**
+     * The tags assigned to an account (its own or its organisation's) that
+     * have an access end date - for the client notices in
+     * src/views/header.php. Returned whether ended or not; AccessExpiry::notice()
+     * decides what to show.
+     *
+     * @return array<int, array{name: string, expires_on: string}>
+     */
+    public static function getDatedTags(int $userId): array
+    {
+        $stmt = Database::getConnection()->prepare('
+            SELECT DISTINCT t.name, t.expires_on
+            FROM ' . self::EFFECTIVE_TAGS_SQL . ' e
+            JOIN tags t ON t.id = e.tag_id
+            WHERE e.user_id = :id AND t.expires_on IS NOT NULL
+            ORDER BY t.expires_on, t.name
+        ');
+        $stmt->execute(['id' => $userId]);
+        return $stmt->fetchAll();
+    }
+
     public static function setAgentActivationId(int $tagId, ?string $activationId): void
     {
         Database::getConnection()

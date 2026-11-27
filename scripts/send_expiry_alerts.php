@@ -3,12 +3,11 @@
 declare(strict_types=1);
 
 /**
- * Emails admins when an organisation's or account's access end date is 30
- * days away, and again once it has passed. Rules in
- * src/Lib/AccessExpiryAlerts.php; the dates themselves are set on
- * Admin > Organisations and Manage Users (see src/Lib/AccessExpiry.php).
- * Makes NO Qualys API calls. Expiry itself doesn't depend on this job -
- * sign-in checks the date directly - it only sends the reminders.
+ * Emails admins when a tag's access end date is 30 days away, and again once
+ * it has passed. Rules in src/Lib/AccessExpiryAlerts.php; the dates are set
+ * in the Tags table on Manage Users (see src/Lib/AccessExpiry.php). Makes NO
+ * Qualys API calls. Expiry itself doesn't depend on this job - every page
+ * checks the date directly - it only sends the reminders.
  *
  * Usage:
  *   php scripts/send_expiry_alerts.php            # normal cron run

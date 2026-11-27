@@ -31,13 +31,6 @@ class Auth
     // show a "too many attempts" message instead of "wrong password", and so
     // we never even reach the credential check for a throttled IP.
     public const RESULT_THROTTLED = 'throttled';
-    // Right password, but the account's access end date has passed (see
-    // AccessExpiry). Only ever returned after the password is verified, so it
-    // tells nobody anything they didn't already know. lastAccessUntil() has
-    // the date for the login page's message.
-    public const RESULT_EXPIRED = 'expired';
-
-    private static ?string $lastAccessUntil = null;
 
     /**
      * Verifies username/password and, if both are correct, either finishes
@@ -77,8 +70,7 @@ class Auth
         // UserRepository::findByUsernameOrEmail().
         $stmt = $pdo->prepare(
             'SELECT id, username, password_hash, is_admin, failed_login_attempts, locked_until, mfa_enabled,
-                    (is_active = 1 AND ' . UserRepository::ORG_ACTIVE_CONDITION . ') AS is_active,
-                    expires_on, (SELECT o_ex.expires_on FROM organisations o_ex WHERE o_ex.id = users.organisation_id) AS org_expires_on
+                    (is_active = 1 AND ' . UserRepository::ORG_ACTIVE_CONDITION . ') AS is_active
              FROM users WHERE username = :login_username OR email = :login_email LIMIT 1'
         );
         $stmt->execute([
@@ -123,16 +115,6 @@ class Auth
         $pdo->prepare(
             'UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE id = :id'
         )->execute(['id' => $user['id']]);
-
-        // Access end date passed (AccessExpiry): checked only now the password
-        // is proven, so the login page can say why rather than "incorrect
-        // password", without revealing anything to someone guessing.
-        $accessUntil = AccessExpiry::effective($user['expires_on'], $user['org_expires_on'], (int)$user['is_admin'] === 1);
-        if (AccessExpiry::isExpired($accessUntil)) {
-            self::$lastAccessUntil = $accessUntil;
-            self::auditFailure($user, $username, 'access expired');
-            return self::RESULT_EXPIRED;
-        }
 
         session_regenerate_id(true);
 
@@ -396,7 +378,6 @@ class Auth
         $_SESSION['can_uninstall'] = $account['can_uninstall'];
         $_SESSION['is_org_admin']  = $account['is_org_admin'];
         $_SESSION['organisation_id'] = $account['organisation_id'];
-        $_SESSION['access_until']  = $account['access_until'];
     }
 
     /**
@@ -409,20 +390,6 @@ class Auth
     private static function checkOwnAccount(): array
     {
         $account = UserRepository::getSessionAccount((int)$_SESSION['user_id']);
-        if ($account !== null && $account['expired']) {
-            // Access end date has passed (AccessExpiry) - same as deactivated,
-            // but the login page says why. Emptied rather than destroyed (like
-            // SessionTimeout::enforce()) so the reason survives to that page.
-            AuditLog::record('auth.access_expired', ['details' => ['access_until' => $account['access_until']]]);
-            $_SESSION = [];
-            if (session_status() === PHP_SESSION_ACTIVE) {
-                session_regenerate_id(true);
-            }
-            $_SESSION['signed_out_reason'] = SessionTimeout::REASON_ACCESS_EXPIRED;
-            $_SESSION['signed_out_access_until'] = $account['access_until'];
-            header('Location: /login');
-            exit;
-        }
         if ($account === null || !$account['is_active']) {
             // Account deleted or deactivated - drop the session. Deactivating
             // used to leave existing sessions working until they ended.
@@ -517,7 +484,6 @@ class Auth
         $_SESSION['can_uninstall']   = $account['can_uninstall'];
         $_SESSION['is_org_admin']    = $account['is_org_admin'];
         $_SESSION['organisation_id'] = $account['organisation_id'];
-        $_SESSION['access_until']    = $account['access_until'];
         // Start from the view the client would get at sign-in, not the admin's.
         $defaultTagId = UserRepository::getDefaultTagId($targetId);
         if ($defaultTagId !== null) {
@@ -664,19 +630,6 @@ class Auth
             );
         }
         session_destroy();
-    }
-
-    /** The signed-in (or viewed-as) account's access end date, if it has one - see AccessExpiry. */
-    public static function accessUntil(): ?string
-    {
-        $d = $_SESSION['access_until'] ?? null;
-        return is_string($d) && $d !== '' ? $d : null;
-    }
-
-    /** The access end date behind the last RESULT_EXPIRED from attemptLogin(). */
-    public static function lastAccessUntil(): ?string
-    {
-        return self::$lastAccessUntil;
     }
 
     public static function isAdmin(): bool

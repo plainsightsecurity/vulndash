@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../src/bootstrap.php';
 
-use VulnDash\Lib\AccessExpiry;
 use VulnDash\Lib\Auth;
 use VulnDash\Lib\Config;
 use VulnDash\Lib\Helpers;
@@ -43,8 +42,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // account-specific - it says nothing about whether the
                 // username or password was right.
                 $error = 'Too many failed sign-in attempts from your network. Please wait a few minutes and try again.';
-            } elseif ($result === Auth::RESULT_EXPIRED) {
-                $error = AccessExpiry::endedMessage((string)Auth::lastAccessUntil());
             } else {
                 $error = 'Incorrect username or password.';
             }

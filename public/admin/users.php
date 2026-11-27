@@ -254,44 +254,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 break;
 
-            case 'set_access_until':
-                // Optional last day of access - see src/Lib/AccessExpiry.php.
-                // Blank clears it. Renewing = moving it on (or clearing it),
-                // which restores access straight away.
-                $userId = (int)($_POST['user_id'] ?? 0);
-                $user   = UserRepository::getUser($userId);
-                if (!$user) {
-                    throw new \RuntimeException('That account no longer exists.');
-                }
-                if ($user['is_admin']) {
-                    throw new \RuntimeException("Admin accounts don't have an access end date.");
-                }
-                $date = AccessExpiry::parse((string)($_POST['expires_on'] ?? ''));
-                if ($date === $user['expires_on']) {
-                    Helpers::setFlash("No change - {$user['username']}'s access end date is already " . ($date === null ? 'not set' : AccessExpiry::display($date)) . '.');
-                    break;
-                }
-                UserRepository::setExpiresOn($userId, $date);
-                AuditLog::record('admin.user_access_until', $auditTarget($userId) + ['details' => [
-                    'before' => $user['expires_on'], 'after' => $date,
-                ]]);
-                $orgDate = null;
-                if ($user['organisation_id'] !== null) {
-                    $orgDate = OrganisationRepository::get((int)$user['organisation_id'])['expires_on'] ?? null;
-                }
-                $effective = AccessExpiry::effective($date, $orgDate, false);
-                $msg = $date === null
-                    ? "{$user['username']} no longer has an end date of their own."
-                    : "{$user['username']}'s access now ends after " . AccessExpiry::display($date) . '.';
-                if ($effective !== $date) {
-                    $msg .= ' Their organisation\'s date (' . AccessExpiry::display((string)$effective) . ') is earlier, so that one applies.';
-                }
-                if (AccessExpiry::isExpired($effective)) {
-                    $msg .= ' That date has passed, so they are signed out and can\'t sign in.';
-                }
-                Helpers::setFlash($msg);
-                break;
-
             case 'toggle_admin':
                 $userId = (int)($_POST['user_id'] ?? 0);
                 if ($userId === $currentUserId) {
@@ -447,6 +409,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 Helpers::setFlash($activationId === null
                     ? "Activation ID cleared for '{$tagName}'."
                     : "Activation ID for '{$tagName}' saved - accounts with this tag can now get the install command from the Assets page.");
+                break;
+
+            case 'set_tag_access_until':
+                // Optional last day non-admin accounts can see this tag's
+                // assets - see src/Lib/AccessExpiry.php. Blank clears it.
+                // Renewing = moving it on (or clearing it): access returns
+                // on the clients' next click.
+                $tagId = (int)($_POST['tag_id'] ?? 0);
+                $tagRow = UserRepository::getTagsByIds([$tagId])[0] ?? throw new \RuntimeException('That tag no longer exists.');
+                $date = AccessExpiry::parse((string)($_POST['expires_on'] ?? ''));
+                $before = $tagRow['expires_on'] ?? null;
+                if ($date === $before) {
+                    Helpers::setFlash("No change - '{$tagRow['name']}' " . ($date === null ? 'has no access end date.' : 'already ends after ' . AccessExpiry::display($date) . '.'));
+                    break;
+                }
+                UserRepository::setTagExpiresOn($tagId, $date);
+                AuditLog::record('admin.tag_access_until', [
+                    'target_type' => 'tag', 'target_id' => $tagId, 'target_label' => $tagRow['name'],
+                    'details' => ['before' => $before, 'after' => $date],
+                ]);
+                if ($date === null) {
+                    $msg = "'{$tagRow['name']}' no longer has an access end date.";
+                } elseif (AccessExpiry::isExpired($date)) {
+                    $msg = "'{$tagRow['name']}' access ended after " . AccessExpiry::display($date) . ' - client accounts no longer see its assets. Admins still do.';
+                } else {
+                    $msg = "Client accounts can see '{$tagRow['name']}' until the end of " . AccessExpiry::display($date) . '.';
+                }
+                if (AccessExpiry::isExpired($before) && !AccessExpiry::isExpired($date)) {
+                    $msg .= ' Its clients can see it again.';
+                }
+                Helpers::setFlash($msg);
                 break;
 
             case 'delete_tag':
@@ -758,9 +751,7 @@ bjones,bob.jones@wavehill.co.uk,Wavehill Ltd,Wavehill-DMZ,no</pre>
                 $userDevices = $trustedDevicesByUser[(int)$u['id']] ?? [];
             ?>
             <tr class="user-row<?= $u['is_active'] ? '' : ' user-inactive' ?>">
-                <td class="nowrap"><?= Helpers::e($u['username']) ?><?= (int)$u['id'] === $currentUserId ? ' <span class="checkbox-hint">(you)</span>' : '' ?><?php if (!$u['is_active']): // active is the norm, so only the exception is shown ?> <span class="badge badge-inactive">Inactive</span><?php endif; ?><?php
-                    $uAccessUntil = AccessExpiry::effective($u['expires_on'], $u['organisation_expires_on'], (bool)$u['is_admin']);
-                    if ($uAccessUntil !== null): ?> <span class="badge <?= AccessExpiry::isExpired($uAccessUntil) ? 'badge-danger' : (AccessExpiry::isEnding($uAccessUntil) ? 'badge-warn' : 'badge-neutral') ?>" title="<?= Helpers::e('Last day of access: ' . AccessExpiry::display($uAccessUntil) . ($u['expires_on'] !== null && $u['expires_on'] === $uAccessUntil ? ' (set on this account)' : ' (from the organisation)')) ?>"><?= AccessExpiry::isExpired($uAccessUntil) ? 'Expired' : 'Until ' . Helpers::e(date('j M Y', (int)strtotime($uAccessUntil))) ?></span><?php endif; ?></td>
+                <td class="nowrap"><?= Helpers::e($u['username']) ?><?= (int)$u['id'] === $currentUserId ? ' <span class="checkbox-hint">(you)</span>' : '' ?><?php if (!$u['is_active']): // active is the norm, so only the exception is shown ?> <span class="badge badge-inactive">Inactive</span><?php endif; ?></td>
                 <td><?= Helpers::e($u['email']) ?></td>
                 <td class="nowrap">
                     <span class="badge <?= $u['is_admin'] ? 'badge-accent' : 'badge-neutral' ?>"><?= $u['is_admin'] ? 'Admin' : 'Client' ?></span>
@@ -855,24 +846,6 @@ bjones,bob.jones@wavehill.co.uk,Wavehill Ltd,Wavehill-DMZ,no</pre>
                                     </label>
                                     <button type="submit" class="btn btn-sm btn-secondary">Save</button>
                                 </div>
-                            </form>
-                        </div>
-                        <?php endif; ?>
-
-                        <?php if (!$u['is_admin']): ?>
-                        <div class="user-manage-group">
-                            <h3>Access until</h3>
-                            <form method="post" class="user-manage-stack">
-                                <input type="hidden" name="action" value="set_access_until">
-                                <input type="hidden" name="user_id" value="<?= (int)$u['id'] ?>">
-                                <input type="hidden" name="csrf_token" value="<?= Helpers::e($csrfToken) ?>">
-                                <div class="user-manage-inline">
-                                    <input type="date" name="expires_on" value="<?= Helpers::e((string)($u['expires_on'] ?? '')) ?>"
-                                        aria-label="Last day of access for <?= Helpers::e($u['username']) ?>">
-                                    <button type="submit" class="btn btn-sm btn-secondary">Save</button>
-                                </div>
-                                <span class="checkbox-hint">Last day they can sign in; blank = no end<?php
-                                    if ($u['organisation_expires_on'] !== null): ?>. Organisation: until <?= Helpers::e(AccessExpiry::display((string)$u['organisation_expires_on'])) ?> - the earlier date applies<?php endif; ?>.</span>
                             </form>
                         </div>
                         <?php endif; ?>
@@ -994,7 +967,7 @@ bjones,bob.jones@wavehill.co.uk,Wavehill Ltd,Wavehill-DMZ,no</pre>
     </div>
 </div>
 
-<div class="panel">
+<div class="panel" id="tags">
     <h2>Tags</h2>
     <p class="page-subtitle" style="margin-bottom: 0.75rem;">
         Tags are normally created automatically the first time an agent carrying one reports in.
@@ -1010,11 +983,17 @@ bjones,bob.jones@wavehill.co.uk,Wavehill Ltd,Wavehill-DMZ,no</pre>
         "Install agent" button on the Assets page, showing the Windows and macOS/Linux install
         commands with the ID filled in. Leave it blank to offer no install command for the tag.
     </p>
+    <p class="page-subtitle" style="margin-bottom: 0.75rem;">
+        Set <strong>Access until</strong> (e.g. the client's CE+ expiry) and, after that day, client
+        accounts stop seeing the tag's assets - whether they have it themselves or through their
+        organisation. Admins still see everything, and agents keep reporting. Clients get a notice
+        30 days before, and you get an email then and when it ends. Move the date on or clear it to renew.
+    </p>
 
     <?php if (!empty($tags)): ?>
     <div class="table-wrap" style="margin-bottom: 1.25rem;">
         <table class="vuln-table admin-table">
-            <thead><tr><th>Name</th><th>Qualys identifier</th><th>Agent activation ID</th><th>Users</th><th>Assets</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Name</th><th>Qualys identifier</th><th>Agent activation ID</th><th title="Last day client accounts can see this tag's assets">Access until</th><th>Users</th><th>Assets</th><th>Actions</th></tr></thead>
             <tbody>
                 <?php foreach ($tags as $tag):
                     $tagUserCount  = (int)($tag['user_count'] ?? 0);
@@ -1043,6 +1022,20 @@ bjones,bob.jones@wavehill.co.uk,Wavehill Ltd,Wavehill-DMZ,no</pre>
                                 aria-label="Agent activation ID for <?= Helpers::e($tag['name']) ?>">
                             <button type="submit" class="btn btn-sm btn-secondary">Save</button>
                         </form>
+                    </td>
+                    <td class="nowrap">
+                        <form method="post" class="activation-id-form">
+                            <input type="hidden" name="action" value="set_tag_access_until">
+                            <input type="hidden" name="tag_id" value="<?= (int)$tag['id'] ?>">
+                            <input type="hidden" name="csrf_token" value="<?= Helpers::e($csrfToken) ?>">
+                            <input type="date" name="expires_on" value="<?= Helpers::e((string)($tag['expires_on'] ?? '')) ?>"
+                                aria-label="Last day clients can see <?= Helpers::e($tag['name']) ?>">
+                            <button type="submit" class="btn btn-sm btn-secondary">Save</button>
+                        </form>
+                        <?php if (($tag['expires_on'] ?? null) !== null): ?>
+                            <?php if (AccessExpiry::isExpired($tag['expires_on'])): ?><span class="badge badge-danger">Ended</span>
+                            <?php elseif (AccessExpiry::isEnding($tag['expires_on'])): ?><span class="badge badge-warn"><?= AccessExpiry::daysLeft($tag['expires_on']) ?>d left</span><?php endif; ?>
+                        <?php endif; ?>
                     </td>
                     <td class="mono"><?= $tagUserCount ?></td>
                     <td class="mono"><?= $tagAssetCount ?></td>

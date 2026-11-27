@@ -503,18 +503,22 @@ there is no backlog email. Needs
 
 `--dry-run` shows who would be emailed without sending or recording anything.
 
-**Access end dates.** An organisation (Admin > Organisations) and an
-individual client account (Manage Users > Manage) can each have an optional
-**Access until** date - the last day of access, inclusive, e.g. the client's
-CE+ expiry. A member gets the earlier of the two; admin accounts never
-expire. From the day after, the account is treated as deactivated: sign-in
-is refused with a message giving the date (only after the right password),
-an open session ends on its next request, and it gets no emails. Moving the
-date on or clearing it restores access at once. In the last 30 days the
-client sees a banner on every page, and `scripts/send_expiry_alerts.php`
-emails admins once then, and once more when access ends. Rules in
-`src/Lib/AccessExpiry.php`; needs
-`database/migrations/2026-11-27-add-access-expiry.sql`. Makes no Qualys API
+**Tag access end dates.** Each tag in the Tags table on Manage Users can
+have an optional **Access until** date - the last day, inclusive, that client
+(non-admin) accounts can see its assets, e.g. that client's CE+ expiry. It's
+on the tag rather than the account so an MSP that sees several clients keeps
+the rest when one lapses. From the day after, the tag drops out of every
+client account's scope - its own tags and its organisation's alike - so
+every page, export and notification/KEV email follows
+(`UserRepository::LIVE_TAGS_SQL`, used for the session scope and
+`getEffectiveTagIds()`). Admins, syncs and Qualys are unaffected, and nobody
+is locked out: a client with no live tags left signs in to an empty view
+with a notice. Clients see a notice in a tag's last 30 days and for 30 days
+after it ends. `scripts/send_expiry_alerts.php` emails admins once in the
+last 30 days and once when it ends. Moving the date on or clearing it
+restores access at once. Rules in `src/Lib/AccessExpiry.php`; needs
+`database/migrations/2026-11-27-tag-access-expiry.sql` (which also removes
+the short-lived account/organisation end date columns). Makes no Qualys API
 calls.
 
 ```cron

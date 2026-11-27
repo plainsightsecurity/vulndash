@@ -457,7 +457,6 @@ require __DIR__ . '/../src/views/header.php';
     <p>To find someone, type part of their username or email in the <strong>Search</strong> box above the Users table, or pick a <strong>Tag</strong> to list only the accounts that carry it (<em>No tags</em> lists client accounts that would see nothing). The two combine, and the list stays filtered after you make a change.</p>
     <p>Press <strong>Manage</strong> on a user's row to open their actions:</p>
     <ul>
-        <li><strong>Access until</strong> - an optional last day this account can sign in, for a client outside an organisation or one person who should finish earlier. If their organisation also has a date, the earlier one applies. Admin accounts never expire.</li>
         <li><strong>Email</strong> - correct their email address. Tick the box to send a password link to the new address at the same time: a setup link if they've never signed in, otherwise a reset link.</li>
         <li><strong>Access</strong> - edit tags, make or remove admin, grant or revoke agent uninstall.</li>
         <li><strong>Password</strong> - <strong>Email reset link</strong> so they choose their own, or set one for them (12+ characters).</li>
@@ -468,6 +467,7 @@ require __DIR__ . '/../src/views/header.php';
     <p>Press <strong>View as</strong> on a client account's row to see the dashboard exactly as they do - their tags, hidden findings, preferences and, for an organisation admin, their <strong>My organisation</strong> page. Deactivated accounts can be viewed too. An amber bar stays at the top of every page while you're viewing; press <strong>Return to admin</strong> in it to come back. Anything you do while viewing acts on their account but is recorded in the Audit Log under your name. Admin accounts can't be viewed as.</p>
     <h3>Tags</h3>
     <p>Tags come from Qualys. Add a tag with its name and Qualys identifier, or leave the identifier blank to create a <em>pending</em> tag to fill in later. Set a tag's <strong>Agent activation ID</strong> to give users with that tag the <strong>Install agent</strong> button on the Assets page, pre-filled with that ID.</p>
+    <p>Set a tag's <strong>Access until</strong> date (for example the client's CE+ expiry) to end clients' access to it. After that day, client accounts stop seeing the tag's assets, whether they have the tag themselves or through their organisation, so an MSP with several clients keeps the others. Admins still see everything and agents keep reporting. For the last 30 days, clients with the tag see a notice saying when access ends, and you get an email; you get another when it ends. A client left with no tags at all can still sign in, but sees no data and a notice explaining why. To renew, move the date on or clear it, and access returns on their next click.</p>
 </section>
 <?php endif; ?>
 
@@ -492,7 +492,6 @@ require __DIR__ . '/../src/views/header.php';
     <p>Account menu &rarr; <strong>Organisations</strong>. An organisation groups a client's accounts and the tags they all see: every member sees the organisation's tags, plus any <em>extra tags</em> set on them individually in Manage Users. Change the organisation's tags and everyone's access changes on their next click.</p>
     <ul>
         <li><strong>User limit</strong> - the most <em>active</em> accounts the organisation can have. It stops its organisation admins inviting or reactivating past it; you can still go over it yourself. Leave blank for no limit.</li>
-        <li><strong>Access until</strong> - optional last day the organisation's members can sign in, e.g. the CE+ certificate's expiry. The day after, they're signed out and can't sign in or get emails, as if suspended. In the last 30 days members see a banner saying when their access ends, and you get an email; you get another when it ends. To renew, move the date on (or clear it) and access returns straight away.</li>
         <li><strong>Suspend</strong> - every member is signed out, can't sign in and gets no emails until you reactivate it.</li>
         <li><strong>Delete</strong> - members stay, without an organisation, keeping only their own extra tags.</li>
         <li><strong>Members</strong> - opens Manage Users filtered to that organisation.</li>
