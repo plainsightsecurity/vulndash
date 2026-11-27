@@ -40,6 +40,31 @@ spl_autoload_register(function (string $class): void {
     }
 });
 
+// CLI scripts must not run as root (2026-11-27). Anything a script creates -
+// its lock file in /tmp, a log it's redirected to - would be root-owned, and
+// the www-data cron job then can't open it and stops, silently: that's how
+// the exploit intel sync went unrun from July to November 2026 (a root-owned
+// /var/log/vulndash/exploit_intel.log), and how lock files have broken syncs
+// before. So a script started as root stops here and prints the command to
+// use instead. Exceptions: scripts/migrate.php, whose --root mode needs root
+// for MySQL's socket login and writes nothing but its own 0666 lock; and
+// VULNDASH_ALLOW_ROOT=1 for a deliberate one-off (the test suite sets it when
+// run as root in a sandbox).
+if (PHP_SAPI === 'cli' && function_exists('posix_geteuid') && posix_geteuid() === 0
+    && getenv('VULNDASH_ALLOW_ROOT') !== '1') {
+    $vdScript = (string)($_SERVER['SCRIPT_FILENAME'] ?? ($argv[0] ?? ''));
+    if (basename($vdScript) !== 'migrate.php') {
+        $vdPath = realpath($vdScript) ?: $vdScript;
+        $vdArgs = array_map('escapeshellarg', array_slice($_SERVER['argv'] ?? [], 1));
+        fwrite(STDERR, "Refusing to run as root: files this script creates (lock files, logs) would be owned by root,\n"
+            . "and the www-data cron jobs would then be unable to open them and stop running.\n"
+            . "Run it as www-data instead:\n\n"
+            . '  sudo -u www-data php ' . escapeshellarg($vdPath) . ($vdArgs !== [] ? ' ' . implode(' ', $vdArgs) : '') . "\n\n"
+            . "(For a deliberate one-off as root, prefix the command with VULNDASH_ALLOW_ROOT=1.)\n");
+        exit(1);
+    }
+}
+
 // CLI scripts (cron jobs, account creation) don't need session handling.
 if (PHP_SAPI !== 'cli') {
     ini_set('session.use_strict_mode', '1');

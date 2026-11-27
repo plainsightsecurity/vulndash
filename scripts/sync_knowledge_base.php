@@ -155,7 +155,7 @@ declare(strict_types=1);
  * stops at one second, and the first fix still kept only the first
  * qualys.kb_max_records_per_window - 1 records of such a second. The live
  * dense second 2026-11-03 06:00:01 turned out to hold at least 4,372
- * records, not 1,900. scripts/check_kb_id_date_combo.php then confirmed
+ * records, not 1,900. A one-off check script (since removed) then confirmed
  * that this endpoint applies id_min/id_max together with a last_modified
  * window, so a dense second is now finished by bisecting its QID range
  * instead - same threshold, same early-stop, same idempotent upsert -
@@ -406,7 +406,7 @@ $pdo = Database::getConnection();
 // --rescan-since is a manual, one-off diagnostic/repair pass, not a normal
 // cron run, but it deliberately still logs under the same 'knowledge_base'
 // sync_type rather than a new one - sync_log.sync_type is a fixed ENUM
-// (see database_schema.sql), and adding a value would mean a migration.
+// (see install_schema.sql), and adding a value would mean a migration.
 // Reusing 'knowledge_base' means a rescan run shows up in the same history
 // SyncStatusRepository reads for the dashboard's admin sync panel, so a
 // rescan that's actively running or that fails could transiently show as
@@ -444,7 +444,7 @@ $exitCode = 0;
 
 try {
     // Round-robins KnowledgeBase calls across API versions - added 2026-07
-    // after directly confirming (scripts/check_kb_api_versions.php) that
+    // after directly confirming (with a one-off check, since removed) that
     // this subscription's KB endpoint still works on /api/2.0/ and
     // /api/3.0/ too, and that each version keeps its own independent
     // hourly rate-limit counter (confirmed: each showed 299/300

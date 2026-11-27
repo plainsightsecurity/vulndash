@@ -143,7 +143,7 @@ $localMax = $localMax !== null && $localMax !== false ? (int)$localMax : null;
 if ($bestSeen === null) {
     fwrite(STDOUT, "Qualys returned no QIDs at all in 1..{$ceiling}.\n");
     fwrite(STDOUT, "That's unexpected for a working KnowledgeBase - check API access/entitlement\n");
-    fwrite(STDOUT, "(see diagnose_qualys_auth.php) rather than trusting this as a real 'empty' result.\n");
+    fwrite(STDOUT, "(a 403 usually means the KnowledgeBase entitlement or the API user's rights) rather than trusting this as a real 'empty' result.\n");
 } else {
     fwrite(STDOUT, "Highest QID on Qualys right now: {$bestSeen}\n");
 }

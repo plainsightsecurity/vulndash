@@ -37,8 +37,7 @@ class ScanRequestRepository
 
     /**
      * Defaults for the send budget - see sendWindow(). 22 of Qualys's 25
-     * calls per 24h, leaving 3 for manual runs such as
-     * scripts/check_ods_api_versions.php; 10 minutes between sends, so a
+     * calls per 24h, leaving 3 for manual runs; 10 minutes between sends, so a
      * burst of clicks is batched into one call rather than spending several.
      */
     public const DEFAULT_DAILY_BUDGET = 22;

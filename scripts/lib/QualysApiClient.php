@@ -463,7 +463,7 @@ class QualysApiClient implements \VulnDash\Lib\AgentProvisioningApi
      * range, for a single second that holds more records than the sync's
      * safety threshold and so can't be split any further by time.
      * Confirmed 2026-11-04 against the live subscription with
-     * scripts/check_kb_id_date_combo.php: a one-second last_modified window
+     * a one-off check script (since removed): a one-second last_modified window
      * plus id_min/id_max returned 2,503 records, every one inside both the
      * second and the QID range, and id_min was inclusive.
      */

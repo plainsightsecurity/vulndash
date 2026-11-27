@@ -180,8 +180,8 @@ declare(strict_types=1);
  * Round-robins across API versions (qualys.host_detection_api_versions -
  * a separate config key from KB sync's qualys.kb_api_versions, since
  * there's no reason the two endpoints' available versions have to move
- * in lockstep) - confirmed 2026-07 via
- * scripts/check_host_detection_api_versions.php that both /api/2.0/ and
+ * in lockstep) - confirmed 2026-07 with a one-off check script (since
+ * removed) that both /api/2.0/ and
  * /api/3.0/ genuinely still work for Host List Detection on this
  * subscription and keep independent rate-limit counters, despite an
  * earlier EOS warning that had been read as "2.0 is retired here" (see

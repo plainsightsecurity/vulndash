@@ -13,6 +13,10 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
 
 export VULNDASH_CONFIG="$ROOT/tests/config.test.php"
+# Scripts refuse to run as root (see src/bootstrap.php). GitHub's runner isn't
+# root; a sandbox often is, so opt in there. tests/cases/RootGuardTest.php
+# checks the guard itself with the variable removed.
+if [ "$(id -u)" = "0" ]; then export VULNDASH_ALLOW_ROOT=1; fi
 export DB_HOST=${DB_HOST:-127.0.0.1} DB_PORT=${DB_PORT:-3306} DB_USER=${DB_USER:-root} DB_PASS=${DB_PASS:-}
 export MYSQL_PWD="$DB_PASS"
 DB=vulndash_test

@@ -1,7 +1,8 @@
 -- Sample data for local testing / demoing the interface before Qualys API
--- access is available. Safe to run against a fresh database after schema.sql.
+-- access is available. Safe to run against a fresh database loaded from
+-- install_schema.sql.
 --
---   mysql -u root -p vulndash < database/schema.sql
+--   mysql -u root -p vulndash < install_schema.sql
 --   mysql -u root -p vulndash < database/seed_sample_data.sql
 --
 -- This creates two test logins (see README.md "Test accounts" section for

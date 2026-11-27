@@ -631,7 +631,7 @@ class UserRepository
     /**
      * Deletes a tag outright. asset_tags and user_tags rows referencing it
      * are removed automatically by the FK ON DELETE CASCADE already in
-     * schema.sql - this does NOT delete the assets or users themselves,
+     * install_schema.sql - this does NOT delete the assets or users themselves,
      * only their association with this specific tag. A non-admin whose
      * only tag gets deleted this way will see zero data afterwards (the
      * same fail-closed behaviour as never having been assigned a tag at

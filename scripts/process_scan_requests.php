@@ -8,7 +8,7 @@ declare(strict_types=1);
  * scan call (QualysApiClient::launchOnDemandScanByAssetIds()).
  *
  * Call budget: the on-demand scan endpoint allows 25 calls per 24h and
- * exists only under /qps/rest/1.0/ (scripts/check_ods_api_versions.php found
+ * exists only under /qps/rest/1.0/ (a one-off check script, since removed, found
  * 2.0-7.0 all refuse it, 2026-11-10), so there's no other version to rotate
  * across. Every waiting request goes in the same call, however many there
  * are. A send goes as soon as anything is queued, as long as

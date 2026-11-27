@@ -1,81 +1,71 @@
-# Vulnerability Management Dashboard
+# Vulnerability Management Dashboard (Nexus)
 
-A LAMP-stack (Apache/MySQL-MariaDB/PHP) application for
-`https://dashboard.plainsightsecurity.co.uk` that will consume vulnerability
-data from Qualys and present it to scoped user accounts, filterable by
-severity and by Cyber Essentials Plus (CE+) pass/fail status.
+A multi-tenant vulnerability dashboard for Plainsight Security's clients, live
+at `https://dashboard.plainsightsecurity.co.uk`. It pulls Qualys VMDR data
+(Cloud Agent only) and shows each client account only the assets carrying
+its tags, with Cyber Essentials Plus (CE+) pass/fail judged from CVSS, patch
+dates and end-of-life software. Plain PHP 8.3 / MySQL 8.0 / Apache 2.4 on
+Ubuntu: no framework, no Composer, PSR-4 autoloading under `VulnDash\`.
 
 ## Current status
 
-**The interface, database, and account/tag-scoping logic are built and
-tested end-to-end against sample data. The Qualys integration itself is not
-implemented yet**, because there's no API access/credentials to build or
-test against. This was the deliberate starting point agreed for this first
-pass. See "Next steps" at the bottom for exactly what's left.
+In production. The Qualys syncs (KnowledgeBase, host detections, tags),
+CISA KEV / FIRST EPSS exploit intelligence and every page below are built,
+running from cron and covered by the test suite (`tests/`, run on every push
+to GitHub against MySQL 8.0 and PHP 8.3 - see "Tests").
 
-Everything described below has been run and verified in a disposable test
-environment (a fresh MariaDB database, PHP's built-in server, real HTTP
-requests): login, lockout-on-repeated-failure, CSRF rejection, tag-scoped
-data isolation between accounts, the severity and CE+ filters, pagination,
-the account-creation CLI script, and the full two-factor authentication
-flow (enroll, confirm, login challenge, trust-device bypass, admin
-revoke/reset, self-service disable, MFA lockout) against real generated
-TOTP codes verified against the RFC 6238 published test vectors. It has
-**not** been run on your actual server/Apache/PHP-FPM setup, so still
-treat first deployment as a test deployment.
+What it does:
 
-## What's built vs. what's a stub
-
-| Area | Status |
-|---|---|
-| Database schema | Complete |
-| Login, sessions, lockout | Complete |
-| Two-factor authentication (TOTP) + trusted devices | Complete |
-| Tag-scoped accounts (multi-tenant style access) | Complete |
-| Dashboard (asset count + severity counts) | Complete |
-| CE+ pass/fail logic and filter | Complete |
-| Vulnerability list, severity filter, pagination | Complete |
-| Admin UI: create users, assign/edit tags, reset passwords, activate/deactivate | Complete |
-| Account creation (CLI, still available as an alternative to the admin UI) | Complete |
-| Qualys KnowledgeBase sync | **Stub only** - throws until implemented |
-| Qualys host detection sync | **Stub only** - throws until implemented |
-| Qualys asset tag sync | **Not started** - see "Next steps" |
+- **Client views, scoped by tag** (fail-closed in
+  `VulnerabilityRepository::buildTagScopeJoin()`): Dashboard (risk score,
+  severity and CE+ counts), Trends, CE+ Readiness (per-host pass / at risk /
+  fail, assessment dates, projections), Assets (on-demand scans, agent
+  install command, agent uninstalls), Vulnerabilities and detail pages, Top
+  fixes, Search, Reports (CSV and PDF), Preferences, and an in-app Guide.
+- **Accounts**: tag-scoped client accounts, client organisations with
+  delegated organisation admins and user limits, CSV bulk import, TOTP
+  two-factor with trusted devices, emailed setup/reset links, login and IP
+  throttling, 8-hour idle / 12-hour absolute sessions, admin "view as".
+- **Admin tools**: Manage Users (accounts and the Tags table: activation IDs,
+  access end dates), Organisations, Agent Setup (Qualys tag + activation key
+  per client, via the API), Audit Log, API Usage (Qualys call budget and
+  forecast).
+- **Emails** (Resend): activity notifications, new-KEV alerts, and admin
+  alerts for the Qualys API budget, sync failures and client access ending.
+- **Operations**: migrations tracked by `scripts/migrate.php`, sync health
+  on the dashboard and by email, history retention, log rotation, and a
+  guard that stops scripts being run as root (see "Cron jobs").
 
 ## Directory structure
 
 ```
 dashboard.plainsightsecurity.co.uk/
 ├── public/                  <- Apache DocumentRoot points HERE, not at the project root
-│   ├── index.php             redirects to /login.php or /dashboard.php
-│   ├── login.php
-│   ├── logout.php
-│   ├── mfa.php                self-service two-factor setup/manage (enable, disable, trusted devices)
-│   ├── mfa_verify.php         login-time two-factor code challenge
-│   ├── dashboard.php         top-level asset/severity/CE+ counts
-│   ├── vulnerabilities.php   filterable, paginated vulnerability list
-│   ├── admin/
-│   │   └── users.php         admin-only: create users, assign tags, reset passwords, manage MFA
-│   ├── .htaccess
-│   └── assets/{css,js}        includes assets/js/qrcode.js (vendored, MIT-licensed, for MFA QR codes)
+│   ├── *.php                 the client pages (dashboard, trends, ce_readiness, assets,
+│   │                         vulnerabilities, top_fixes, search, reports, preferences, guide...)
+│   ├── admin/                admin-only: users, organisations, agent_setup, audit_log,
+│   │                         api_usage, impersonate ("view as")
+│   ├── org/users.php         organisation admins: their own organisation's accounts
+│   ├── .htaccess             clean URLs, security headers
+│   └── assets/               css, js, img, vendor/ckeditor5 (self-hosted, GPL)
 ├── src/                     <- outside the web root
-│   ├── bootstrap.php         autoloading + session setup, included by every entry point
-│   ├── config/config.php     DB + Qualys credentials + MFA encryption key (edit before deploying)
-│   ├── Lib/                  Config, Database, Auth, Helpers, CvssCalculator,
-│   │                         VulnerabilityRepository, UserRepository, Totp,
-│   │                         MfaService, TrustedDeviceRepository
-│   └── views/                header.php / footer.php
-├── scripts/                 <- CLI-only, outside the web root
-│   ├── create_account.php    creates a user + assigns tag scope
-│   ├── sync_knowledge_base.php    cron job (stub - see status table)
-│   ├── sync_host_detections.php   cron job (stub - see status table)
-│   └── lib/QualysApiClient.php    the integration point for both syncs
+│   ├── bootstrap.php         autoloading, sessions, and the run-as-root guard for scripts
+│   ├── config/config.php     credentials and settings - never committed (see config.example.php)
+│   ├── Lib/                  repositories and services (Auth, VulnerabilityRepository,
+│   │                         UserRepository, CvssCalculator, CePlusReadiness, AccessExpiry...)
+│   │   └── Vendor/FPDF/      PDF generation (vendored)
+│   └── views/                header, footer and shared page partials
+├── scripts/                 <- CLI only: cron jobs, migrate.php, account creation, diagnostics
+│   └── lib/QualysApiClient.php    every Qualys API call
 ├── database/
-│   ├── schema.sql
-│   ├── seed_sample_data.sql  optional - sample data for testing the UI now
-│   └── migrations/           schema changes for installs deployed before a given fix
-└── config/
-    ├── apache-vhost.conf            final vhost - only enable once a cert exists (see below)
-    └── apache-vhost-bootstrap.conf  temporary port-80-only vhost, used to obtain the first cert
+│   ├── migrations/           schema changes, applied and tracked by scripts/migrate.php
+│   └── seed_sample_data.sql  optional sample data for a test install
+├── install_schema.sql        the authoritative schema for a new install
+├── config/
+│   ├── apache-vhost.conf            final vhost - only enable once a cert exists (see below)
+│   ├── apache-vhost-bootstrap.conf  temporary port-80-only vhost, used to obtain the first cert
+│   └── logrotate-vulndash           log rotation for /var/log/vulndash (copy to /etc/logrotate.d/)
+└── tests/                    run.sh: lint, schema + migrations, unit/integration and page tests
 ```
 
 `public/` is the only folder that should ever be reachable over HTTP.
@@ -217,8 +207,8 @@ each test starts from an empty database, and `seed_estate()` in
    ```
 
    `install_schema.sql` is the authoritative schema (a `mysqldump
-   --no-data` of production); `database/schema.sql` is older and has
-   drifted, so don't use it for a new install.
+   --no-data` of production, kept in step with every migration - the test
+   suite checks this on every push).
 
    Optionally load sample data so you can see the interface working before
    Qualys access exists (see "Test accounts" below):
@@ -461,19 +451,40 @@ fully pinned down in the brief:
   per table row for at-a-glance triage) rather than a generic admin-template
   look, since this is a tool analysts will use daily, not a marketing page.
 
-## Cron jobs (once Qualys API access exists)
+## Cron jobs
 
-Both sync scripts currently throw a clear "not implemented" error - see the
-"Next steps" section. Once `scripts/lib/QualysApiClient.php` is filled in,
-suggested cron entries are:
+Every job runs from the **www-data** crontab (`sudo crontab -u www-data -e`)
+and logs to `/var/log/vulndash/`. The current schedule:
 
 ```cron
-# KnowledgeBase - changes slowly, sync every few hours is plenty
-0 */4 * * * php /var/www/dashboard.plainsightsecurity.co.uk/scripts/sync_knowledge_base.php >> /var/log/vulndash/kb_sync.log 2>&1
+# Qualys limit: 25 calls per API version per 24h. The host sync is started every
+# 30 minutes but picks its own interval to fit the limit (src/Lib/ApiBudget.php).
 
-# Host detections - match this to your actual Qualys scan cadence
-0 * * * * php /var/www/dashboard.plainsightsecurity.co.uk/scripts/sync_host_detections.php >> /var/log/vulndash/detection_sync.log 2>&1
+# --- Qualys syncs ---
+10 0,12 * * *  php /var/www/dashboard.plainsightsecurity.co.uk/scripts/sync_knowledge_base.php >> /var/log/vulndash/kb_sync.log 2>&1
+18,48 * * * *  php /var/www/dashboard.plainsightsecurity.co.uk/scripts/sync_host_detections.php >> /var/log/vulndash/detection_sync.log 2>&1
+25 0,6,12,18 * * *  php /var/www/dashboard.plainsightsecurity.co.uk/scripts/fetch_missing_kb_qids.php >> /var/log/vulndash/kb_missing_fetch.log 2>&1
+40 0,6,12,18 * * *  php /var/www/dashboard.plainsightsecurity.co.uk/scripts/reconcile_asset_inventory.php --confirm >> /var/log/vulndash/asset_inventory_reconcile.log 2>&1
+
+# --- Qualys queues (only call the API when something is queued) ---
+2,7,12,17,22,27,32,37,42,47,52,57 * * * *  php /var/www/dashboard.plainsightsecurity.co.uk/scripts/process_scan_requests.php >> /var/log/vulndash/scan_requests.log 2>&1
+17,37,57 * * * *  php /var/www/dashboard.plainsightsecurity.co.uk/scripts/process_agent_uninstalls.php --confirm >> /var/log/vulndash/deletion.log 2>&1
+
+# --- No Qualys calls ---
+30 0,6,12,18 * * *  php /var/www/dashboard.plainsightsecurity.co.uk/scripts/sync_exploit_intel.php >> /var/log/vulndash/exploit_intel.log 2>&1
+0 7 * * *  php /var/www/dashboard.plainsightsecurity.co.uk/scripts/send_notifications.php >> /var/log/vulndash/notifications.log 2>&1
+55 * * * *  php /var/www/dashboard.plainsightsecurity.co.uk/scripts/send_kev_alerts.php >> /var/log/vulndash/kev_alerts.log 2>&1
+5,20,35,50 * * * *  php /var/www/dashboard.plainsightsecurity.co.uk/scripts/send_sync_alerts.php >> /var/log/vulndash/sync_alerts.log 2>&1
+5 7 * * *  php /var/www/dashboard.plainsightsecurity.co.uk/scripts/send_expiry_alerts.php >> /var/log/vulndash/expiry_alerts.log 2>&1
+20 3 * * *  php /var/www/dashboard.plainsightsecurity.co.uk/scripts/prune_history.php >> /var/log/vulndash/prune_history.log 2>&1
 ```
+
+**Never run these scripts as root.** A lock file or log created by root
+can't be opened by the www-data cron job, which then stops silently - that's
+how the exploit intel sync went unrun from July to November 2026. Scripts
+now refuse to start as root and print the command to use instead:
+`sudo -u www-data php /var/www/dashboard.plainsightsecurity.co.uk/scripts/<script>.php`.
+The exception is `scripts/migrate.php`, which needs root for `--root`.
 
 Create the log directory first: `sudo mkdir -p /var/log/vulndash && sudo chown www-data:www-data /var/log/vulndash`.
 Then install the log rotation, or the cron logs grow forever (weekly, 8 weeks
@@ -486,16 +497,15 @@ sudo chown root:root /etc/logrotate.d/vulndash && sudo chmod 644 /etc/logrotate.
 sudo logrotate -d /etc/logrotate.d/vulndash
 ```
 
-Every run is recorded in the `sync_log` table (status, records processed,
-error message) regardless of cron - useful for a simple "last sync" widget
-later if you want one. The dashboard's sync-status strip flags a sync as
-"overdue" only after roughly **twice** its expected interval without a success
-(KB defaults to a 4-hour expected interval, so ~8 hours of slack; host
-detections 20 minutes). If the crontab cadence changes, update the matching
+Every sync run is recorded in the `sync_log` table (status, records
+processed, error message). The dashboard's sync status panel (admins) shows
+the Knowledge Base, host detection and exploit intel syncs, and flags one as
+"overdue" after **twice** its expected interval without a success. If the
+crontab cadence changes, update the matching
 `sync.knowledge_base_expected_interval_minutes` /
-`sync.host_detections_expected_interval_minutes` in `src/config/config.php`
-(or the defaults in `src/Lib/SyncStatusRepository.php`) so the strip stays
-accurate.
+`sync.host_detections_expected_interval_minutes` /
+`sync.exploit_intel_expected_interval_minutes` in `src/config/config.php` so
+the panel and the sync failure emails stay accurate.
 
 **New-KEV alert emails.** `scripts/send_kev_alerts.php` emails an account
 when a vulnerability on the CISA Known Exploited Vulnerabilities list newly
@@ -743,31 +753,10 @@ fetch fails, the run still succeeds, keeps that feed's previous data, rebuilds
 the rollup, and notes the failure in `sync_log.error_message`; it reports
 failure only if every attempted feed failed.
 
-## Next steps for Qualys integration
+## Ideas not yet done
 
-This is the main remaining piece of work, and needs real API access to do
-properly rather than guessing further:
-
-1. Confirm your Qualys **API base URL** (varies by platform/shard - check
-   Help > About in the Qualys UI) and put it in `src/config/config.php`.
-2. Confirm the exact **KnowledgeBase** endpoint/parameters/response shape
-   for your subscription and implement `QualysApiClient::fetchKnowledgeBaseChunk()`.
-3. Confirm the exact **host detection** endpoint and implement
-   `QualysApiClient::fetchHostDetections()`, including pagination and
-   incremental sync (only pulling what's changed since the last run).
-4. Work out what you're actually scoping users by - a named **Asset Tag**,
-   a Cloud Agent **Activation ID**, or a mix depending on the client. This
-   determines both the API call (`fetchAssetTags()` almost certainly needs
-   the Asset Management API for named tags, but Activation ID mapping may
-   come from the Cloud Agent API instead) and whether tag sync is one
-   scheduled job or two.
-5. Once tags are flowing in, `scripts/create_account.php` and the admin UI
-   will resolve against real Qualys identifiers instead of the sample ones -
-   no code change needed there, the identifier column already accepts any
-   string (see `database/migrations/2026-07-widen-qualys-tag-id.sql` if
-   you deployed before that fix).
-
-Everything downstream of the API responses - upserting, CVSS calculation,
-CE+ flagging, the dashboard, and the filtered list - is already built and
-tested against the shape these scripts expect; it's the three Qualys calls
-themselves that are the open item.
+- Require two-factor for admin and organisation admin accounts (it is
+  available to everyone, but optional).
+- Reject common or breached passwords (currently: 12 characters minimum).
+- After an on-demand scan, pull just the scanned hosts' detections, so
+  results arrive sooner once the host sync has slowed to fit the API budget.
