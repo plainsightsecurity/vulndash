@@ -5,8 +5,9 @@ namespace VulnDash\Lib;
 
 /**
  * Reads sync_log for the "last sync" status strip shown on the dashboard -
- * purely informational, no writes. Both cron jobs
- * (scripts/sync_knowledge_base.php and scripts/sync_host_detections.php)
+ * purely informational, no writes. The cron jobs
+ * (scripts/sync_knowledge_base.php, scripts/sync_host_detections.php and,
+ * since 2026-11-27, scripts/sync_exploit_intel.php)
  * already write a sync_log row on every run regardless of outcome; this
  * just summarises the most recent state per sync_type so a stuck or
  * silently-failing cron job is visible on the page itself, rather than
@@ -29,6 +30,20 @@ class SyncStatusRepository
     private const LABELS = [
         'knowledge_base'  => 'Knowledge Base sync',
         'host_detections' => 'Host detection sync',
+        'exploit_intel'   => 'Exploit intel sync (CISA KEV + EPSS)',
+    ];
+
+    /**
+     * The exploit-intel sync's two feeds, by the table each replaces in full
+     * when it succeeds (every row's synced_at is reset then). A run where only
+     * one feed fails still records 'success' - by design, so one outage
+     * doesn't stale the other - so the card checks each feed's own freshness
+     * and turns amber ('warning') if one hasn't refreshed within the overdue
+     * threshold (2026-11-27).
+     */
+    private const EXPLOIT_FEEDS = [
+        'cisa_kev'    => 'CISA KEV feed',
+        'epss_scores' => 'EPSS feed',
     ];
 
     /**
@@ -50,6 +65,7 @@ class SyncStatusRepository
     private const DEFAULT_EXPECTED_INTERVAL_MINUTES = [
         'knowledge_base'  => 1440,
         'host_detections' => 180,
+        'exploit_intel'   => 360,   // 00:30, 06:30, 12:30, 18:30
     ];
 
     /**
@@ -123,6 +139,21 @@ class SyncStatusRepository
                 }
             }
 
+            $staleFeeds = [];
+            if ($syncType === 'exploit_intel' && $state === 'healthy') {
+                $limit = time() - $expectedMinutes * 60 * self::OVERDUE_MULTIPLIER;
+                foreach (self::EXPLOIT_FEEDS as $table => $feedLabel) {
+                    $last = $pdo->query("SELECT MAX(synced_at) FROM {$table}")->fetchColumn();
+                    $last = $last !== false && $last !== null ? (string)$last : null;
+                    if ($last === null || strtotime($last) < $limit) {
+                        $staleFeeds[] = ['feed' => $feedLabel, 'last' => $last];
+                    }
+                }
+                if ($staleFeeds !== []) {
+                    $state = 'warning';
+                }
+            }
+
             $results[] = [
                 'sync_type'          => $syncType,
                 'label'              => $label,
@@ -135,6 +166,7 @@ class SyncStatusRepository
                 'last_success_at'    => $lastSuccessAt,
                 'missing_kb_qids'    => $missingKbQids,
                 'kb_missing_warn_hours' => $warnHours,
+                'stale_feeds'        => $staleFeeds,
             ];
         }
 

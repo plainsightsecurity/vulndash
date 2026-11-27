@@ -539,11 +539,12 @@ calls.
 ```
 
 **Sync failure emails.** `scripts/send_sync_alerts.php` emails admins
-(`alerts.admin_emails`, else every active admin) when the Knowledge Base or
-host detection sync has **failed**, is **stuck** (a run still "running" after
+(`alerts.admin_emails`, else every active admin) when the Knowledge Base,
+host detection or exploit intel (CISA KEV + EPSS) sync has **failed**, is **stuck** (a run still "running" after
 twice its expected interval) or is **overdue** (no success for twice its
 expected interval - also what a stopped cron job looks like), or has missing
-KB QIDs that need a person. It judges health exactly as the dashboard's sync
+KB QIDs that need a person, or one exploit intel feed hasn't refreshed in
+twice its interval while runs keep succeeding on the other. It judges health exactly as the dashboard's sync
 status panel does, so the expected intervals under `sync` in
 `src/config/config.php` decide when "overdue" starts. A failure only emails
 once it has lasted `alerts.sync_failed_grace_minutes` (default 60), so a

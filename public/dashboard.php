@@ -372,6 +372,15 @@ $postureTagSuffix = $viewTagId !== null ? ' in this tag' : '';
             <?php endif; ?>
         </div>
         <?php endif; ?>
+        <?php if (!empty($sync['stale_feeds'])): ?>
+        <div class="sync-status-note">
+            <?php foreach ($sync['stale_feeds'] as $stale): ?>
+            <?= Helpers::e($stale['feed']) ?> <?= $stale['last'] !== null ? 'last refreshed ' . Helpers::e(Helpers::relativeTime($stale['last'])) : 'has never loaded' ?>.
+            <?php endforeach; ?>
+            Runs still succeed on the other feed, so KEV flags or EPSS scores may be out of date. Check
+            <code class="mono">/var/log/vulndash/exploit_intel.log</code> and that this server can reach the feed (<code class="mono">exploit_intel</code> in config.php).
+        </div>
+        <?php endif; ?>
         <?php if ($sync['last_success_at']): ?>
         <div class="sync-status-timestamp mono"><?= Helpers::e(Helpers::displayDateTime($sync['last_success_at'])) ?></div>
         <?php endif; ?>

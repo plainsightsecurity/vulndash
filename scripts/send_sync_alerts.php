@@ -3,7 +3,8 @@
 declare(strict_types=1);
 
 /**
- * Emails admins when the Knowledge Base or host detection sync has failed,
+ * Emails admins when the Knowledge Base, host detection or exploit intel
+ * (CISA KEV + EPSS) sync has failed,
  * is stuck or is overdue, and again when it's back to normal. The rules
  * (grace period, reminders, what counts as a problem) are in
  * src/Lib/SyncHealthAlerts.php; health is judged exactly as the dashboard's

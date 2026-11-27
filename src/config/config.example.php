@@ -134,6 +134,7 @@ return [
         // Set these to match the crontab: KB sync twice daily, host sync every 30 min.
         'knowledge_base_expected_interval_minutes'  => 720,  // default 1440
         'host_detections_expected_interval_minutes' => 30,   // default 180
+        'exploit_intel_expected_interval_minutes'   => 360,  // default 360 (00:30, 06:30, 12:30, 18:30)
 
         // Auto interval (src/Lib/ApiBudget.php): cron runs the host sync every
         // host_detection_cron_minutes; each run picks the shortest of

@@ -4,7 +4,8 @@ declare(strict_types=1);
 namespace VulnDash\Lib;
 
 /**
- * Emails admins when the Knowledge Base or host detection sync goes wrong,
+ * Emails admins when the Knowledge Base, host detection or exploit intel
+ * (CISA KEV + EPSS, since 2026-11-27) sync goes wrong,
  * and again when it recovers (2026-11-27). Run every 15 minutes by
  * scripts/send_sync_alerts.php. It judges health exactly as the dashboard's
  * sync status panel does (SyncStatusRepository::getSyncStatuses()), so an
@@ -20,7 +21,9 @@ namespace VulnDash\Lib;
  *              (sync.<type>_expected_interval_minutes). Also what a cron job
  *              that has stopped running looks like.
  *   - warning: missing knowledge base QIDs that need a person (see
- *              MissingKbQidRepository::needsAttention()).
+ *              MissingKbQidRepository::needsAttention()), or one exploit
+ *              intel feed not refreshed in twice its interval while the
+ *              runs still succeed on the other.
  *
  * stuck, overdue and warning are already time-based, so they're sent the
  * first time they're seen. "running" and "never run" are neutral - they
@@ -203,6 +206,12 @@ final class SyncHealthAlerts
                 return "{$label} hasn't succeeded for longer than expected." . $lastOk
                     . ' Nothing has failed since, so check cron is still running the job.';
             case 'warning':
+                if (!empty($s['stale_feeds'])) {
+                    return "{$label}: " . implode('; ', array_map(
+                        static fn (array $f): string => $f['feed'] . ($f['last'] !== null ? ' last refreshed ' . self::when($f['last']) : ' has never loaded'),
+                        $s['stale_feeds']
+                    )) . '. Runs still succeed on the other feed, so KEV flags or EPSS scores may be out of date - check exploit_intel.log.';
+                }
                 return "{$label}: " . count($s['missing_kb_qids'])
                     . ' knowledge base QID(s) are missing and need looking at - see the sync status panel.';
         }
