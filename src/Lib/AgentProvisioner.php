@@ -40,11 +40,9 @@ namespace VulnDash\Lib;
  * Link existing instead of a new set-up.
  *
  * Removing a set-up frees its name for reuse (a name is never retired):
- * unlink() just forgets the record; deleteSetup() - for set-ups this page
- * created, e.g. a test - also deletes in Qualys whatever this page made (the
- * key, and the tag unless it was an existing one the admin chose) and the
- * local tag it made. Linked set-ups can only be unlinked, so a live client's
- * tag and key can't be deleted from here.
+ * unlink() just forgets the record; deleteSetup() also deletes the key and
+ * tag in Qualys and the local tag - for any set-up, linked ones included, so
+ * it needs the tag name typed to confirm.
  *
  * Calls (each its own 25-per-24h counter at Qualys): one tag search and one
  * tag create, one or more key searches (1000 keys per page) and one key
@@ -132,15 +130,17 @@ final class AgentProvisioner
      * has. 'linkable' are those an existing set-up can be recorded from: a
      * Qualys id and an activation ID, and no other set-up using them.
      *
+     * The set-up row carries asset_count: assets VulnDash has with its tag.
+     *
      * @return array<int, array{id: int, name: string, setup: ?array, tags: array<int, array{id: int, name: string}>, linkable: array<int, array{id: int, name: string, qualys_tag_id: string, activation_id: string}>}>
      */
     public static function listForAdmin(): array
     {
         $pdo = Database::getConnection();
         $setups = [];
-        foreach ($pdo->query('SELECT * FROM agent_provisioning')->fetchAll() as $row) {
-            $row = self::shape($row);
-            $setups[$row['organisation_id']] = $row;
+        foreach ($pdo->query('SELECT ap.*, (SELECT COUNT(*) FROM asset_tags at WHERE at.tag_id = ap.local_tag_id) AS asset_count
+                              FROM agent_provisioning ap')->fetchAll() as $row) {
+            $setups[(int)$row['organisation_id']] = self::shape($row) + ['asset_count' => (int)$row['asset_count']];
         }
         $tags = [];
         foreach ($pdo->query('SELECT ot.organisation_id, t.id, t.name, t.qualys_tag_id, t.agent_activation_id,
@@ -235,16 +235,22 @@ final class AgentProvisioner
     }
 
     /**
-     * Deletes a set-up this page created - a test, typically - and what it
-     * made: the activation key and tag in Qualys (key first: Qualys refuses
-     * while active agents use it, and stopping there leaves the tag in
-     * place), then the local tag, which takes the organisation's and any
-     * accounts' links to it. Each step is saved as it completes, so if one
-     * fails, running this again carries on. Something already gone from
-     * Qualys counts as deleted. Linked set-ups are refused: unlink those.
+     * Deletes a set-up and everything it stands for: the activation key and
+     * tag in Qualys (key first: Qualys refuses while active agents use it,
+     * and stopping there leaves the tag in place), then the local tag, which
+     * takes the organisation's and any accounts' links to it. Applies to
+     * every set-up - created, linked or using an existing tag - so it's
+     * guarded by $confirmTagName, which must be the tag name exactly as
+     * shown, checked here before any Qualys call. Each step is saved as it
+     * completes, so if one fails, running this again carries on. Something
+     * already gone from Qualys counts as deleted.
      */
-    public function deleteSetup(int $id): void
+    public function deleteSetup(int $id, string $confirmTagName): void
     {
+        $row = self::get($id) ?? throw new \RuntimeException('That set-up no longer exists.');
+        if (!hash_equals($row['tag_name'], trim($confirmTagName))) {
+            throw new \RuntimeException("Nothing was deleted: type the tag name exactly as shown ({$row['tag_name']}) to confirm.");
+        }
         $pdo = Database::getConnection();
         $lockName = 'vulndash_agent_setup_' . $id;
         $lock = $pdo->prepare('SELECT GET_LOCK(:n, 0)');
@@ -254,10 +260,6 @@ final class AgentProvisioner
         }
         try {
             $row = self::get($id) ?? throw new \RuntimeException('That set-up no longer exists.');
-            if ($row['origin'] === 'linked') {
-                throw new \RuntimeException("{$row['tag_name']} was linked from an existing tag and key, so it can only be unlinked - delete those in Qualys itself if you mean to.");
-            }
-            $deletedKey = $row['activation_key'];
             try {
                 if ($row['activation_key_id'] !== null) {
                     try {
@@ -269,14 +271,7 @@ final class AgentProvisioner
                     }
                     $this->save($row, ['activation_key_id' => null, 'activation_key' => null]);
                 }
-                if ($row['origin'] === 'existing_tag') {
-                    // The tag was there before this set-up: it stays, in
-                    // Qualys and locally, without the deleted key's ID.
-                    if ($row['local_tag_id'] !== null) {
-                        $pdo->prepare('UPDATE tags SET agent_activation_id = NULL WHERE id = :id AND agent_activation_id <=> :k')
-                            ->execute(['id' => $row['local_tag_id'], 'k' => $deletedKey]);
-                    }
-                } elseif ($row['qualys_tag_id'] !== null) {
+                if ($row['qualys_tag_id'] !== null) {
                     try {
                         $this->api->deleteTag($row['qualys_tag_id']);
                     } catch (\RuntimeException $e) {

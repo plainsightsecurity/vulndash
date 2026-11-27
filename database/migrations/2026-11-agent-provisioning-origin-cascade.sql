@@ -6,9 +6,9 @@
 -- an existing table alone. This makes a first-version table match the current
 -- one; on a table already created by the current file it does nothing.
 --
---   1. origin column (created / existing_tag / linked) - what Delete may
---      remove from Qualys. Existing rows were all made by the page, so
---      'created' is right for them.
+--   1. origin column (created / existing_tag / linked) - how each set-up
+--      came about. Existing rows were all made by the page, so 'created'
+--      is right for them.
 --   2. organisation_id NOT NULL, and its foreign key ON DELETE CASCADE (was
 --      SET NULL): deleting an organisation deletes its set-up row, so a
 --      name is never retired. The foreign key has to be dropped first -

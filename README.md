@@ -504,10 +504,11 @@ same-titled key stops it too. Each Qualys id is saved as soon as it's
 returned, so Retry resumes without making a second tag or key. An
 organisation that already has a tag with an activation ID gets Link existing
 (one key search to confirm the key applies the tag; creates nothing) in place
-of Create. Delete removes a set-up made on the page - key and tag in Qualys
-(not a pre-existing tag) and the local tag - so a name can be tested and
-reused; linked set-ups can only be Unlinked (record only). Deleting an
-organisation deletes its set-up record. Calls Qualys
+of Create. Delete removes any set-up, linked ones included - key and tag in
+Qualys and the local tag - after the tag name is typed exactly (checked
+server-side before any Qualys call), so a name can be tested and reused;
+Unlink forgets the record only. Deleting an organisation deletes its set-up
+record. Calls Qualys
 during the request (about four calls, each on its own 25-per-24h counter,
 logged on API Usage) with the same API user as the syncs, which needs Create
 User Tag and Create Activation Key (plus Delete User Tag and Delete

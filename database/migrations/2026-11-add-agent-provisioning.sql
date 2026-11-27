@@ -23,12 +23,11 @@
 --   - qualys_tag_id, activation_key_id, activation_key, local_tag_id: no two
 --     clients can share a tag or a key.
 --
--- origin says what Delete may remove from Qualys, so it never deletes
--- anything this page didn't make: 'created' = this page made the tag and
--- key (both deleted, e.g. after a test); 'existing_tag' = the admin chose an
--- existing Qualys tag and this page made only the key (only the key is
--- deleted); 'linked' = an existing tag and key recorded with Link existing
--- (nothing deleted in Qualys - only ever unlinked).
+-- origin records how the set-up came about, for the page and the audit
+-- trail: 'created' = this page made the tag and key; 'existing_tag' = the
+-- admin chose an existing Qualys tag and this page made the key; 'linked' =
+-- an existing tag and key recorded with Link existing. Delete removes the
+-- key and tag whatever the origin, behind a typed confirmation.
 --
 -- Idempotent: CREATE TABLE IF NOT EXISTS, safe to run more than once.
 -- Additive only - nothing existing is altered.

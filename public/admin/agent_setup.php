@@ -91,15 +91,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             case 'delete':
                 $before ?? throw new \RuntimeException('That set-up no longer exists.');
-                $newClient()->deleteSetup($provId);
+                $newClient()->deleteSetup($provId, (string)($_POST['confirm_tag_name'] ?? ''));
                 unset($_SESSION['agent_setup_existing'][$provId]);
                 AuditLog::record('admin.agent_setup_deleted', [
                     'target_type' => 'organisation', 'target_id' => $before['organisation_id'], 'target_label' => $before['tag_name'],
-                    'details' => ['qualys_tag_id' => $before['qualys_tag_id'], 'activation_key_id' => $before['activation_key_id'], 'origin' => $before['origin']],
+                    'details' => ['qualys_tag_id' => $before['qualys_tag_id'], 'activation_key_id' => $before['activation_key_id'],
+                                  'activation_key' => $before['activation_key'], 'origin' => $before['origin']],
                 ]);
-                Helpers::setFlash("Set-up for {$before['tag_name']} deleted: "
-                    . ($before['origin'] === 'existing_tag' ? 'its activation key was deleted in Qualys; the tag was already there before, so it stays.'
-                        : 'its tag and activation key were deleted in Qualys and here.') . ' The name can be used again.');
+                Helpers::setFlash("Set-up for {$before['tag_name']} deleted: its activation key and tag are gone from Qualys and from VulnDash. "
+                    . 'The organisation is still there and the name can be used again.');
                 break;
 
             default:
@@ -170,15 +170,34 @@ $button = static function (string $action, int $provId, string $label, string $c
     <?php
 };
 
-/** What Delete would remove, for its confirm prompt. */
-$deletePrompt = static function (array $s): string {
-    $what = $s['origin'] === 'existing_tag'
-        ? ($s['activation_key_id'] !== null ? "activation key {$s['activation_key_id']} in Qualys (the tag {$s['tag_name']} was already there, so it stays)" : 'nothing in Qualys')
-        : implode(' and ', array_filter([
-            $s['activation_key_id'] !== null ? "activation key {$s['activation_key_id']}" : null,
-            $s['qualys_tag_id'] !== null ? "tag {$s['tag_name']} (id {$s['qualys_tag_id']}) - Qualys removes it from every asset carrying it -" : null,
-        ])) . ($s['activation_key_id'] !== null || $s['qualys_tag_id'] !== null ? ' in Qualys, and the tag here' : 'nothing in Qualys');
-    return "Delete the set-up for {$s['tag_name']}? This deletes {$what}. Qualys won't delete a key that agents are still using. This can't be undone.";
+/**
+ * Delete, behind a disclosure: what it removes, then a box the tag name has
+ * to be typed into - checked by AgentProvisioner::deleteSetup() before any
+ * Qualys call.
+ */
+$deleteForm = static function (array $s) use ($csrfToken): void {
+    $what = array_filter([
+        $s['activation_key_id'] !== null ? "activation key {$s['activation_key_id']}" : null,
+        $s['qualys_tag_id'] !== null ? "tag {$s['tag_name']} (id {$s['qualys_tag_id']})" : null,
+    ]);
+    ?>
+    <details class="delete-setup">
+        <summary class="btn btn-sm btn-danger">Delete&hellip;</summary>
+        <form method="post">
+            <input type="hidden" name="action" value="delete">
+            <input type="hidden" name="provisioning_id" value="<?= $s['id'] ?>">
+            <input type="hidden" name="csrf_token" value="<?= Helpers::e($csrfToken) ?>">
+            <p class="checkbox-hint">
+                Deletes <?= $what !== [] ? Helpers::e(implode(' and ', $what)) . ' in Qualys' : 'nothing in Qualys' ?>, and the tag in VulnDash<?php if ($s['qualys_tag_id'] !== null): ?> - Qualys removes the tag from every asset carrying it<?php endif; ?><?php if ($s['asset_count'] > 0): ?> (<strong><?= $s['asset_count'] ?></strong> here)<?php endif; ?>,
+                and this organisation's members lose access to those assets and the Install agent button.
+                Qualys won't delete a key that agents are still using. This can't be undone.
+            </p>
+            <label class="field"><span>Type <strong class="mono"><?= Helpers::e($s['tag_name']) ?></strong> to confirm</span>
+                <input type="text" name="confirm_tag_name" class="mono" autocomplete="off" spellcheck="false" required></label>
+            <button type="submit" class="btn btn-sm btn-danger">Delete permanently</button>
+        </form>
+    </details>
+    <?php
 };
 
 $pageTitle = 'Agent Setup';
@@ -199,7 +218,7 @@ require __DIR__ . '/../../src/views/header.php';
 
 <div class="panel">
     <h2>Organisations <span class="checkbox-hint"><?= count($orgs) ?> total</span></h2>
-    <p class="page-subtitle" style="margin-top: 0;">Tag names can use letters, numbers and hyphens only - no spaces. The suggested name can be changed before you create it. Nothing is created if Qualys already has a tag with that name; you'll be asked what to do. Organisations that already have a tag with an activation ID are linked rather than set up again. <strong>Delete</strong> removes a set-up this page created, with its tag and key in Qualys (for tests); <strong>Unlink</strong> only forgets the record. New keys: unlimited, licensed for <?= Helpers::e($modules !== '' ? $modules : '-') ?>.</p>
+    <p class="page-subtitle" style="margin-top: 0;">Tag names can use letters, numbers and hyphens only - no spaces. The suggested name can be changed before you create it. Nothing is created if Qualys already has a tag with that name; you'll be asked what to do. Organisations that already have a tag with an activation ID are linked rather than set up again. <strong>Delete</strong> removes a set-up with its tag and key in Qualys, after you type the tag name; <strong>Unlink</strong> only forgets the record. New keys: unlimited, licensed for <?= Helpers::e($modules !== '' ? $modules : '-') ?>.</p>
     <div class="table-wrap">
     <table class="vuln-table admin-table">
         <thead>
@@ -266,7 +285,7 @@ require __DIR__ . '/../../src/views/header.php';
                             }
                             $button('retry', $s['id'], 'Retry', 'btn-primary');
                         endif; ?>
-                        <?php if ($s['origin'] !== 'linked') { $button('delete', $s['id'], 'Delete', 'btn-danger', $deletePrompt($s)); } ?>
+                        <?php $deleteForm($s); ?>
                         <?php if ($s['status'] === 'complete') {
                             $button('unlink', $s['id'], 'Unlink', 'btn-secondary', "Unlink {$s['tag_name']}? Only this page's record is removed: the tag, key and the organisation's Install agent button stay as they are.");
                         } ?>

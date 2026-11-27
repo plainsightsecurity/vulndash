@@ -1574,6 +1574,14 @@ body.chart-fullscreen-open { overflow: hidden; }
 
 .actions-cell form { display: inline; margin: 0; }
 
+/* Agent Setup's Delete: a disclosure, so the type-the-tag-name form only
+   takes space once someone has asked to delete. */
+.delete-setup summary { list-style: none; display: inline-block; cursor: pointer; }
+.delete-setup summary::-webkit-details-marker { display: none; }
+.delete-setup[open] { flex-basis: 100%; }
+.delete-setup[open] form { display: block; margin-top: 0.5rem; max-width: 28rem; }
+.delete-setup .field { margin: 0.5rem 0; }
+
 /* ------------------------------------------------------------------ */
 /* Tag combobox (multi-select with checkboxes; Manage Users forms)      */
 /* ------------------------------------------------------------------ */
