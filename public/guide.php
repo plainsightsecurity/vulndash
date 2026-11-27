@@ -463,6 +463,8 @@ require __DIR__ . '/../src/views/header.php';
         <li><strong>MFA</strong> - <strong>Reset MFA</strong> if they've lost their authenticator, and revoke their trusted devices one at a time or all at once.</li>
         <li><strong>Account</strong> - <strong>Deactivate</strong> (blocks sign-in but keeps the account; <strong>Reactivate</strong> undoes it) or <strong>Delete</strong>.</li>
     </ul>
+    <h3>Viewing as a user</h3>
+    <p>Press <strong>View as</strong> on a client account's row to see the dashboard exactly as they do - their tags, hidden findings, preferences and, for an organisation admin, their <strong>My organisation</strong> page. Deactivated accounts can be viewed too. An amber bar stays at the top of every page while you're viewing; press <strong>Return to admin</strong> in it to come back. Anything you do while viewing acts on their account but is recorded in the Audit Log under your name. Admin accounts can't be viewed as.</p>
     <h3>Tags</h3>
     <p>Tags come from Qualys. Add a tag with its name and Qualys identifier, or leave the identifier blank to create a <em>pending</em> tag to fill in later. Set a tag's <strong>Agent activation ID</strong> to give users with that tag the <strong>Install agent</strong> button on the Assets page, pre-filled with that ID.</p>
 </section>

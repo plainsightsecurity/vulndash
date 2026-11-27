@@ -759,6 +759,14 @@ bjones,bob.jones@wavehill.co.uk,Wavehill Ltd,Wavehill-DMZ,no</pre>
                 ?></td>
                 <td>
                     <div class="actions-cell actions-nowrap">
+                        <?php if (!$u['is_admin']): // admins can't be viewed as - see Auth::startImpersonation() ?>
+                        <form method="post" action="/admin/impersonate">
+                            <input type="hidden" name="action" value="start">
+                            <input type="hidden" name="user_id" value="<?= (int)$u['id'] ?>">
+                            <input type="hidden" name="csrf_token" value="<?= Helpers::e($csrfToken) ?>">
+                            <button type="submit" class="btn btn-sm btn-secondary" title="<?= Helpers::e('See the dashboard exactly as ' . $u['username'] . ' does') ?>">View as</button>
+                        </form>
+                        <?php endif; ?>
                         <button type="button" class="btn btn-sm btn-secondary manage-toggle" data-manage-toggle aria-expanded="false" aria-controls="manage-<?= (int)$u['id'] ?>">Manage <span class="manage-caret" aria-hidden="true">&#9662;</span></button>
                     </div>
                 </td>

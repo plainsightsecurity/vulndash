@@ -13,7 +13,10 @@ namespace VulnDash\Lib;
  * would be worse than a gap in the log).
  *
  * The actor defaults to the signed-in session user. Sign-in events, which
- * happen before there is a session user, pass the account explicitly.
+ * happen before there is a session user, pass the account explicitly. While
+ * an admin is viewing as someone (Auth::startImpersonation()) the actor is
+ * the admin, with details.viewing_as naming the account - so nothing an admin
+ * does that way can ever read as the client having done it.
  * Usernames are copied into each row so history survives account deletion.
  *
  * Action names are "area.verb" - auth.*, account.*, admin.*, finding.*,
@@ -72,6 +75,8 @@ class AuditLog
         'admin.agent_setup_deleted'    => 'Deleted client agent set-up (and its Qualys tag/key)',
         'admin.remediation_set'        => 'Saved custom remediation',
         'admin.remediation_reverted'   => 'Reverted custom remediation',
+        'admin.impersonation_started'  => 'Started viewing as account',
+        'admin.impersonation_ended'    => 'Stopped viewing as account',
         'finding.hidden'               => 'Hid a finding',
         'finding.unhidden'             => 'Unhid a finding',
         'scan.requested'               => 'Requested on-demand scan',
@@ -91,6 +96,13 @@ class AuditLog
             $userId   = $hasActor ? ($opts['user_id'] ?? null) : (isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null);
             $username = $hasActor ? ($opts['username'] ?? null) : ($_SESSION['username'] ?? null);
             $details  = $opts['details'] ?? [];
+
+            $imp = $_SESSION['impersonator'] ?? null;
+            if (!$hasActor && is_array($imp) && !empty($imp['user_id'])) {
+                $details  = ['viewing_as' => $username] + $details;
+                $userId   = (int)$imp['user_id'];
+                $username = $imp['username'] ?? null;
+            }
 
             $pdo = Database::getConnection();
             $pdo->prepare(

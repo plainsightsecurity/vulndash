@@ -335,6 +335,60 @@ class Auth
         // The same lookup (2026-11) also returns the account's CURRENT access,
         // which replaces the copy taken at login below - see
         // UserRepository::getSessionAccount() for the gap this closes.
+        $impersonator = self::impersonator();
+        if ($impersonator !== null) {
+            // "View as": the person at the keyboard is the admin, so it's the
+            // admin's account - not the one being viewed - that decides whether
+            // this session stays valid. Losing admin rights, being deactivated
+            // or a password change on the admin account ends the whole session,
+            // exactly as it would have without impersonation.
+            $admin = UserRepository::getSessionAccount($impersonator['user_id']);
+            if ($admin === null || !$admin['is_active'] || !$admin['is_admin']
+                || $admin['session_epoch'] !== $impersonator['session_epoch']) {
+                self::logout();
+                header('Location: /login');
+                exit;
+            }
+
+            // The viewed account is deliberately NOT held to the active/epoch
+            // checks below: viewing a deactivated account (or one in a
+            // suspended organisation) is allowed for troubleshooting, and the
+            // client changing their own password shouldn't throw the admin out.
+            // It must still exist and still be a non-admin - an admin can never
+            // be viewed as, so promotion mid-session ends the view.
+            $account = UserRepository::getSessionAccount((int)$_SESSION['user_id']);
+            if ($account === null || $account['is_admin']) {
+                self::stopImpersonation($account === null ? 'account deleted' : 'account made admin');
+                Helpers::setFlash('Stopped viewing as that account - it was deleted or made an admin.', 'error');
+                header('Location: /admin/users');
+                exit;
+            }
+        } else {
+            $account = self::checkOwnAccount();
+        }
+
+        // Access as it stands now, not as it stood at login: a tag removed,
+        // admin rights taken away or the uninstall grant revoked applies from
+        // this request on - and one added does too, without a re-login. Every
+        // tag-scoped read (Auth::tagIds(), isAdmin(), canUninstall()) reads
+        // these, so the fail-closed scope join gets the current set. While
+        // viewing as someone these are THEIR access, which is the point.
+        $_SESSION['is_admin']      = $account['is_admin'];
+        $_SESSION['tag_ids']       = $account['tag_ids'];
+        $_SESSION['can_uninstall'] = $account['can_uninstall'];
+        $_SESSION['is_org_admin']  = $account['is_org_admin'];
+        $_SESSION['organisation_id'] = $account['organisation_id'];
+    }
+
+    /**
+     * The ordinary (not "view as") half of check(): the signed-in account must
+     * still exist, be active and carry the session epoch this session was
+     * issued. Signs the session out and exits otherwise.
+     *
+     * @return array the account as UserRepository::getSessionAccount() returns it
+     */
+    private static function checkOwnAccount(): array
+    {
         $account = UserRepository::getSessionAccount((int)$_SESSION['user_id']);
         if ($account === null || !$account['is_active']) {
             // Account deleted or deactivated - drop the session. Deactivating
@@ -361,16 +415,157 @@ class Auth
             exit;
         }
 
-        // Access as it stands now, not as it stood at login: a tag removed,
-        // admin rights taken away or the uninstall grant revoked applies from
-        // this request on - and one added does too, without a re-login. Every
-        // tag-scoped read (Auth::tagIds(), isAdmin(), canUninstall()) reads
-        // these, so the fail-closed scope join gets the current set.
-        $_SESSION['is_admin']      = $account['is_admin'];
-        $_SESSION['tag_ids']       = $account['tag_ids'];
-        $_SESSION['can_uninstall'] = $account['can_uninstall'];
-        $_SESSION['is_org_admin']  = $account['is_org_admin'];
+        return $account;
+    }
+
+    /**
+     * Starts "view as" for an admin: from the next request this session sees
+     * exactly what $targetId sees - same tags, same per-account hides, same
+     * preferences, organisation-admin pages if they have them - and can act as
+     * them. The admin's own identity is parked in $_SESSION['impersonator'] so
+     * check() keeps validating the admin's account, AuditLog keeps recording
+     * the admin as the actor, and stopImpersonation() can put it all back.
+     *
+     * Caller must already have confirmed the session is a (non-impersonating)
+     * admin - see public/admin/impersonate.php.
+     *
+     * @throws \InvalidArgumentException when the target can't be viewed as
+     */
+    public static function startImpersonation(int $targetId): void
+    {
+        if (self::isImpersonating()) {
+            throw new \InvalidArgumentException('Already viewing as another account - return to admin first.');
+        }
+        $target = UserRepository::getUser($targetId);
+        if (!$target) {
+            throw new \InvalidArgumentException('That account no longer exists.');
+        }
+        // Admins see everything already, and viewing as one would hand this
+        // session someone else's admin identity - never useful, so never allowed.
+        if (!empty($target['is_admin'])) {
+            throw new \InvalidArgumentException('Admin accounts can\'t be viewed as.');
+        }
+        $account = UserRepository::getSessionAccount($targetId);
+        if ($account === null) {
+            throw new \InvalidArgumentException('That account no longer exists.');
+        }
+
+        $adminId = self::userId();
+        AuditLog::record('admin.impersonation_started', [
+            'target_type'  => 'user',
+            'target_id'    => $targetId,
+            'target_label' => (string)$target['username'],
+        ]);
+
+        $_SESSION['impersonator'] = [
+            'user_id'       => $adminId,
+            'username'      => self::username(),
+            'session_epoch' => isset($_SESSION['session_epoch'])
+                ? (int)$_SESSION['session_epoch']
+                : (UserRepository::getSessionEpoch($adminId) ?? 0),
+            // The admin's own UI state, restored on the way back so returning
+            // to admin lands where they left off.
+            'view_tag_id'   => $_SESSION['view_tag_id'] ?? null,
+            'show_hidden'   => $_SESSION['show_hidden'] ?? null,
+            'started_at'    => time(),
+        ];
+
+        // Identity changes, so the session ID does too (same reasoning as
+        // finalizeLogin()). The CSRF token and timeouts carry over: it's still
+        // the admin's sign-in. Guarded only for the CLI test harness, which
+        // has no real session.
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_regenerate_id(true);
+        }
+        $_SESSION['user_id']         = $targetId;
+        $_SESSION['username']        = (string)$target['username'];
+        $_SESSION['is_admin']        = false;
+        $_SESSION['tag_ids']         = $account['tag_ids'];
+        $_SESSION['can_uninstall']   = $account['can_uninstall'];
+        $_SESSION['is_org_admin']    = $account['is_org_admin'];
         $_SESSION['organisation_id'] = $account['organisation_id'];
+        // Start from the view the client would get at sign-in, not the admin's.
+        $defaultTagId = UserRepository::getDefaultTagId($targetId);
+        if ($defaultTagId !== null) {
+            $_SESSION['view_tag_id'] = $defaultTagId;
+        } else {
+            unset($_SESSION['view_tag_id']);
+        }
+        unset($_SESSION['show_hidden']);
+    }
+
+    /**
+     * Ends "view as" and puts the admin's own identity back. The next check()
+     * reloads the admin's current access. No-op if not impersonating.
+     */
+    public static function stopImpersonation(?string $reason = null): void
+    {
+        $imp = self::impersonator();
+        if ($imp === null) {
+            return;
+        }
+        $viewedId   = self::userId();
+        $viewedName = self::username();
+
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_regenerate_id(true);
+        }
+        $_SESSION['user_id']       = $imp['user_id'];
+        $_SESSION['username']      = $imp['username'];
+        $_SESSION['session_epoch'] = $imp['session_epoch'];
+        // Restored optimistically; check() re-reads the real values on the
+        // next request (and signs out if the admin is no longer an admin).
+        $_SESSION['is_admin']      = true;
+        $_SESSION['tag_ids']       = [];
+        unset($_SESSION['is_org_admin'], $_SESSION['organisation_id']);
+        foreach (['view_tag_id', 'show_hidden'] as $k) {
+            if ($imp[$k] !== null) {
+                $_SESSION[$k] = $imp[$k];
+            } else {
+                unset($_SESSION[$k]);
+            }
+        }
+        unset($_SESSION['impersonator']);
+
+        // Recorded after the swap back, so the admin is the actor without the
+        // "viewing as" annotation AuditLog adds during impersonation.
+        $details = ['duration_seconds' => max(0, time() - $imp['started_at'])];
+        if ($reason !== null) {
+            $details['reason'] = $reason;
+        }
+        AuditLog::record('admin.impersonation_ended', [
+            'target_type'  => 'user',
+            'target_id'    => $viewedId,
+            'target_label' => $viewedName,
+            'details'      => $details,
+        ]);
+    }
+
+    public static function isImpersonating(): bool
+    {
+        return self::impersonator() !== null;
+    }
+
+    /**
+     * The admin behind a "view as" session, or null when the session is
+     * nobody's but its own.
+     *
+     * @return array{user_id: int, username: string, session_epoch: int, view_tag_id: ?int, show_hidden: ?bool, started_at: int}|null
+     */
+    public static function impersonator(): ?array
+    {
+        $imp = $_SESSION['impersonator'] ?? null;
+        if (!is_array($imp) || empty($imp['user_id'])) {
+            return null;
+        }
+        return [
+            'user_id'       => (int)$imp['user_id'],
+            'username'      => (string)($imp['username'] ?? ''),
+            'session_epoch' => (int)($imp['session_epoch'] ?? 0),
+            'view_tag_id'   => isset($imp['view_tag_id']) ? (int)$imp['view_tag_id'] : null,
+            'show_hidden'   => isset($imp['show_hidden']) ? (bool)$imp['show_hidden'] : null,
+            'started_at'    => (int)($imp['started_at'] ?? time()),
+        ];
     }
 
     /**

@@ -60,6 +60,17 @@ $cases = [
     // must leave out every admin section and both agent sections.
     ['client', 'guide.php',              '',                  'html',  ['id="dashboard"', 'Scanning on demand', 'aria-current="page">User guide</a>'], array_merge(OTHER_TENANTS, ['id="admin-', 'href="#admin-', 'guide-admin-note', 'href="/admin/users"', '>Manage Users<', 'Uninstall', 'Install agent', 'Custom remediation', 'sync status'])],
     ['client', 'admin/users.php',        '',                  '403',   [], []],
+    // Admin viewing as client: the client's scope exactly, plus the banner.
+    ['admin',  'admin/users.php',        '',                  'html',  ['action="/admin/impersonate"', '>View as</button>'], []],
+    ['client', 'dashboard.php',          '',                  'html',  [], ['impersonation-bar', 'Return to admin']],
+    ['as_client', 'dashboard.php',       '',                  'html',  ['Viewing as <strong>client</strong>', 'audited as admin', 'Return to admin'], OTHER_TENANTS],
+    ['as_client', 'assets.php',          '',                  'html',  ['host-a'], array_merge(OTHER_TENANTS, ['href="/admin/users"'])],
+    ['as_client', 'vulnerabilities.php', '',                  'html',  ['host-a'], OTHER_TENANTS],
+    ['as_client', 'vulnerability_detail.php', 'id=3',         'any',   [], OTHER_TENANTS],
+    ['as_client', 'report_csv.php',      '',                  'csv',   ['host-a'], OTHER_TENANTS],
+    ['as_client', 'search.php',          'q=host',            'html',  [], OTHER_TENANTS],
+    ['as_client', 'preferences.php',     '',                  'html',  ['Return to admin'], []],
+    ['as_client', 'admin/users.php',     '',                  '403',   [], []],
     ['client', 'admin/api_usage.php',    '',                  '403',   [], []],
     ['client', 'admin/agent_setup.php',  '',                  '403',   [], []],
 ];

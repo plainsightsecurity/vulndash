@@ -5,7 +5,7 @@ declare(strict_types=1);
 // tests/pages.php. Usage: php tests/render_page.php <page.php> <query> <role> [post-body]
 // With a post-body (URL-encoded, csrf_token added automatically) the request
 // is a POST, for tests that drive a form handler.
-// role: admin | client | anon. Any PHP warning/notice/deprecation is printed
+// role: admin | client | as_client | anon. Any PHP warning/notice/deprecation is printed
 // as a "PHPERR:" line so the caller can fail on it.
 
 [$_, $page, $query, $role, $postBody] = $argv + [null, '', '', 'anon', null];
@@ -42,6 +42,11 @@ if ($role === 'admin') {
     $_SESSION += ['user_id' => 1, 'username' => 'admin', 'is_admin' => true, 'tag_ids' => [], 'last_activity' => time()];
 } elseif ($role === 'client') {
     $_SESSION += ['user_id' => 2, 'username' => 'client', 'is_admin' => false, 'tag_ids' => [1], 'last_activity' => time()];
+} elseif ($role === 'as_client') {
+    // Admin (user 1) viewing as client (user 2) - see Auth::startImpersonation().
+    $_SESSION += ['user_id' => 2, 'username' => 'client', 'is_admin' => false, 'tag_ids' => [1], 'last_activity' => time(),
+                  'impersonator' => ['user_id' => 1, 'username' => 'admin', 'session_epoch' => 0, 'view_tag_id' => null,
+                                     'show_hidden' => null, 'started_at' => time()]];
 }
 
 chdir(dirname(__DIR__ . '/../public/' . $page));

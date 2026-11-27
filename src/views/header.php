@@ -7,7 +7,9 @@ declare(strict_types=1);
  * autoloader registered).
  */
 
+use VulnDash\Lib\Auth;
 use VulnDash\Lib\Config;
+use VulnDash\Lib\Helpers;
 
 $appName = Config::get('app.name') ?? 'Vulnerability Management Dashboard';
 ?>
@@ -138,4 +140,16 @@ $appName = Config::get('app.name') ?? 'Vulnerability Management Dashboard';
         <?php endif; ?>
     </div>
 </header>
+<?php if ($viewingAs = Auth::impersonator()): ?>
+<div class="impersonation-bar" role="status">
+    <div class="impersonation-bar-inner">
+        <span>Viewing as <strong><?= Helpers::e($_SESSION['username'] ?? '') ?></strong> - anything you do here acts on their account and is audited as <?= Helpers::e($viewingAs['username']) ?>.</span>
+        <form method="post" action="/admin/impersonate">
+            <input type="hidden" name="action" value="stop">
+            <input type="hidden" name="csrf_token" value="<?= Helpers::e(Helpers::csrfToken()) ?>">
+            <button type="submit" class="btn btn-sm btn-secondary">Return to admin</button>
+        </form>
+    </div>
+</div>
+<?php endif; ?>
 <main class="site-main<?= !empty($wideLayout) ? ' site-main-wide' : '' ?>">

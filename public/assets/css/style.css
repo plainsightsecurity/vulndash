@@ -167,6 +167,31 @@ html { scrollbar-gutter: stable; }
     justify-content: space-between;
 }
 
+/* "View as" banner (src/views/header.php). Amber, full-width and directly
+   under the header on every page, so an admin can't lose track of whose
+   account they're acting on. */
+.impersonation-bar {
+    background: rgba(201, 154, 58, 0.16);
+    border-bottom: 1px solid rgba(201, 154, 58, 0.5);
+    color: var(--text);
+    font-size: 0.875rem;
+}
+
+.impersonation-bar-inner {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0.5rem 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.impersonation-bar form {
+    margin: 0;
+}
+
 .brand {
     display: flex;
     align-items: center;
