@@ -6,6 +6,7 @@ require_once __DIR__ . '/../src/bootstrap.php';
 use VulnDash\Lib\Auth;
 use VulnDash\Lib\CePlusDeadline;
 use VulnDash\Lib\Helpers;
+use VulnDash\Lib\ServerHealth;
 use VulnDash\Lib\StaleAgent;
 use VulnDash\Lib\SyncStatusRepository;
 use VulnDash\Lib\UserRepository;
@@ -386,6 +387,25 @@ $postureTagSuffix = $viewTagId !== null ? ' in this tag' : '';
         <?php endif; ?>
     </div>
     <?php endforeach; ?>
+    <?php
+    // Disk space (src/Lib/ServerHealth.php): shown here too, not only by
+    // email, so a full disk is visible even if email delivery is the thing
+    // that's broken. The fullest disk the app depends on.
+    $fullestDisk = ServerHealth::filesystems()[0] ?? null;
+    if ($fullestDisk !== null):
+        $diskLow = $fullestDisk['used_pct'] >= ServerHealth::warnPercent();
+    ?>
+    <div class="sync-status-card sync-status-<?= $diskLow ? 'failed' : 'healthy' ?>">
+        <div class="sync-status-header">
+            <span class="sync-status-dot"></span>
+            <span class="sync-status-label">Disk space</span>
+        </div>
+        <div class="sync-status-detail">
+            <?= Helpers::e(number_format($fullestDisk['used_pct'], 1)) ?>% full on <span class="mono"><?= Helpers::e($fullestDisk['mount']) ?></span> - <?= Helpers::e(ServerHealth::bytes($fullestDisk['free'])) ?> free<?= $diskLow ? '. Free some space before MySQL, logs and backups stop.' : '.' ?>
+        </div>
+        <div class="sync-status-timestamp"><a href="/admin/api_usage#server">Details</a></div>
+    </div>
+    <?php endif; ?>
 </div>
 <?php endif; ?>
 

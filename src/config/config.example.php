@@ -124,7 +124,10 @@ return [
         'ods_busy_calls'            => 18,  // email when on-demand scan calls in 24h reach this (0 = off)
         // 'sync_health'               => false, // default on
         'sync_failed_grace_minutes' => 60,  // default 60 - a failure must last this long before it emails
-        'sync_reminder_hours'       => 24,  // default 24 - repeat while unresolved (0 = never)
+        'sync_reminder_hours'       => 24,  // default 24 - repeat while unresolved (0 = never); also used for disk alerts
+        // Disk space (src/Lib/ServerHealth.php), checked by send_sync_alerts.php:
+        'disk_warn_percent'         => 85,  // default 85 - email when a disk the app uses gets this full
+        // 'disk_paths'             => ['/srv/backups'], // extra places to watch (root, MySQL data, app, logs, /var/backups always)
     ],
 
     'sync' => [

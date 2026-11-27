@@ -572,6 +572,17 @@ itself stopping altogether.
 
 `--dry-run` shows what would be emailed without sending or saving anything.
 
+**Disk space.** The same 15-minute job also checks the disks the app depends
+on (root, MySQL's data directory, the app, `/var/log/vulndash`,
+`/var/backups`, plus any `alerts.disk_paths`) and emails admins when one
+reaches `alerts.disk_warn_percent` (default 85%) full, every
+`alerts.sync_reminder_hours` while it stays there, and once when it's back
+under 80%. A full disk stops MySQL, the cron logs and the backups at once.
+The dashboard's status panel shows a Disk space card (so it's visible even
+if email is what's broken), and API Usage has a Server panel with each
+disk and the database's size by table. Logic in `src/Lib/ServerHealth.php`
+and `src/Lib/ServerHealthAlerts.php`.
+
 **Audit log.** Admin menu > Audit Log (`/admin/audit_log`) lists who did
 what: sign-ins (and failures, lockouts, rejected two-factor codes), account
 security changes, every admin action on users and tags, hidden findings,

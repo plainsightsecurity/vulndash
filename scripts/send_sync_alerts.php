@@ -3,6 +3,10 @@
 declare(strict_types=1);
 
 /**
+ * Also checks disk space each run (src/Lib/ServerHealthAlerts.php: an email
+ * when a disk the app depends on reaches alerts.disk_warn_percent, default
+ * 85%), so that needs no cron line of its own.
+ *
  * Emails admins when the Knowledge Base, host detection or exploit intel
  * (CISA KEV + EPSS) sync has failed,
  * is stuck or is overdue, and again when it's back to normal. The rules
@@ -28,6 +32,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../src/bootstrap.php';
 
+use VulnDash\Lib\ServerHealthAlerts;
 use VulnDash\Lib\SyncHealthAlerts;
 
 $options = getopt('', ['dry-run']);
@@ -47,12 +52,17 @@ if (!flock($lockHandle, LOCK_EX | LOCK_NB)) {
 }
 
 $exitCode = 0;
-try {
-    $r = SyncHealthAlerts::check(null, $dryRun);
-    $stamp = date('Y-m-d H:i:s');
-    if ($r['problems'] === [] && $r['recoveries'] === []) {
-        fwrite(STDOUT, "{$stamp} Nothing new to report.\n");
-    } else {
+// Syncs first, then disk space (src/Lib/ServerHealthAlerts.php) - each its
+// own email, and one failing doesn't stop the other being checked.
+foreach (['Syncs' => static fn () => SyncHealthAlerts::check(null, $dryRun),
+          'Disk'  => static fn () => ServerHealthAlerts::check(null, $dryRun)] as $what => $check) {
+    try {
+        $r = $check();
+        $stamp = date('Y-m-d H:i:s');
+        if ($r['problems'] === [] && $r['recoveries'] === []) {
+            fwrite(STDOUT, "{$stamp} {$what}: nothing new to report.\n");
+            continue;
+        }
         foreach ($r['problems'] as $l) {
             fwrite(STDOUT, "{$stamp} PROBLEM  {$l}\n");
         }
@@ -67,13 +77,12 @@ try {
         } else {
             fwrite(STDOUT, "{$stamp} Emailed: " . implode(', ', $r['sent_to']) . "\n");
         }
+    } catch (Throwable $e) {
+        fwrite(STDERR, date('Y-m-d H:i:s') . " ERROR ({$what}): " . $e->getMessage() . "\n");
+        $exitCode = 1;
     }
-} catch (Throwable $e) {
-    fwrite(STDERR, date('Y-m-d H:i:s') . ' ERROR: ' . $e->getMessage() . "\n");
-    $exitCode = 1;
-} finally {
-    flock($lockHandle, LOCK_UN);
-    fclose($lockHandle);
 }
+flock($lockHandle, LOCK_UN);
+fclose($lockHandle);
 
 exit($exitCode);

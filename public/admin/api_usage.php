@@ -7,6 +7,7 @@ use VulnDash\Lib\ApiBudget;
 use VulnDash\Lib\ApiCallLogRepository;
 use VulnDash\Lib\Auth;
 use VulnDash\Lib\Helpers;
+use VulnDash\Lib\ServerHealth;
 
 Auth::requireAdmin();
 
@@ -242,5 +243,53 @@ require __DIR__ . '/../../src/views/header.php';
 </div>
 
 <?php endif; ?>
+
+<?php
+// Server: disk space and database size (src/Lib/ServerHealth.php). Alerts at
+// alerts.disk_warn_percent come from scripts/send_sync_alerts.php.
+$filesystems = ServerHealth::filesystems();
+$dbSize = ServerHealth::databaseSize();
+$diskWarn = ServerHealth::warnPercent();
+?>
+<div class="chart-panel" id="server">
+    <div class="chart-panel-header">
+        <h2>Server</h2>
+        <span class="chart-panel-hint">Disk space and database size - admins are emailed when a disk reaches <?= $diskWarn ?>% full</span>
+    </div>
+    <div class="table-wrap">
+        <table class="vuln-table admin-table">
+            <thead><tr><th>Disk</th><th>Holds</th><th class="col-num">Used</th><th class="col-num">Free</th><th class="col-num">Size</th></tr></thead>
+            <tbody>
+                <?php if ($filesystems === []): ?>
+                <tr class="empty-row"><td colspan="5">Couldn't read disk space on this server.</td></tr>
+                <?php else: foreach ($filesystems as $fs): ?>
+                <tr>
+                    <td class="mono"><?= Helpers::e($fs['mount']) ?></td>
+                    <td><?= Helpers::e(implode(', ', $fs['holds'])) ?></td>
+                    <td class="col-num mono"><?= Helpers::e(number_format($fs['used_pct'], 1)) ?>%
+                        <?php if ($fs['used_pct'] >= $diskWarn): ?><span class="badge badge-danger">Low on space</span><?php endif; ?></td>
+                    <td class="col-num mono"><?= Helpers::e(ServerHealth::bytes($fs['free'])) ?></td>
+                    <td class="col-num mono"><?= Helpers::e(ServerHealth::bytes($fs['total'])) ?></td>
+                </tr>
+                <?php endforeach; endif; ?>
+            </tbody>
+        </table>
+    </div>
+    <p style="margin: 1rem 0 0.5rem;">Database: <strong><?= Helpers::e(ServerHealth::bytes($dbSize['total'])) ?></strong> (data and indexes). Largest tables:</p>
+    <div class="table-wrap">
+        <table class="vuln-table admin-table">
+            <thead><tr><th>Table</th><th class="col-num">Size</th><th class="col-num">Rows (approx.)</th></tr></thead>
+            <tbody>
+                <?php foreach ($dbSize['tables'] as $t): ?>
+                <tr>
+                    <td class="mono"><?= Helpers::e($t['name']) ?></td>
+                    <td class="col-num mono"><?= Helpers::e(ServerHealth::bytes($t['bytes'])) ?></td>
+                    <td class="col-num mono"><?= number_format($t['rows']) ?></td>
+                </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+</div>
 
 <?php require __DIR__ . '/../../src/views/footer.php'; ?>
