@@ -285,9 +285,9 @@ require __DIR__ . '/../src/views/header.php';
          rectangle; the plate reads fine on the light theme too. width/height
          are the image's real pixels (aspect ratio) so the browser reserves
          space before it loads - CSS caps the displayed height. -->
-    <div class="dashboard-logo-plate">
-        <img class="dashboard-logo" src="/assets/img/logo-full.jpg" alt="Plainsight Security" width="980" height="588">
-    </div>
+    <a class="dashboard-logo-plate" href="https://plainsightsecurity.co.uk" target="_blank" rel="noopener">
+        <img class="dashboard-logo" src="/assets/img/logo-full.jpg" alt="Plainsight Security website" width="980" height="588">
+    </a>
     <div class="page-heading dashboard-hero-heading">
         <h1>Dashboard</h1>
         <p class="page-subtitle">
