@@ -7,11 +7,12 @@ declare(strict_types=1);
  * database/migrations/2026-11-add-agent-provisioning.sql (Admin > Agent Setup).
  *
  * The migration only adds a table, so it can't damage anything; Agent Setup
- * errors until it has run. This says whether it has, and previews the page:
- * each organisation's suggested tag name, and any that would clash with a tag
- * VulnDash already knows (same name, any case) - those need a different name
- * typed in, or the existing tag chosen when Qualys reports it. It also checks
- * qualys.activation_key_modules, which new keys are licensed for.
+ * errors until it has run. This says whether it has, and previews the page
+ * for each organisation: one that already has a tag with an activation ID is
+ * offered Link existing (records it, creates nothing); any other gets a
+ * suggested tag name, flagged if it clashes with a tag VulnDash already knows
+ * (same name, any case). It also checks qualys.activation_key_modules, which
+ * new keys are licensed for.
  *
  * --check-qualys additionally makes two read-only Qualys calls (one tag
  * search, one activation key search per 1000 keys - each against its own 25-per-24h
@@ -57,7 +58,18 @@ try {
 $orgs = $pdo->query('SELECT id, name FROM organisations ORDER BY name')->fetchAll();
 fwrite(STDOUT, count($orgs) . " organisation(s):\n");
 $byName = $pdo->prepare('SELECT name, qualys_tag_id FROM tags WHERE LOWER(TRIM(name)) = LOWER(TRIM(:n)) LIMIT 1');
+$withKey = $pdo->prepare('SELECT t.name, t.qualys_tag_id, t.agent_activation_id FROM organisation_tags ot JOIN tags t ON t.id = ot.tag_id
+                          WHERE ot.organisation_id = :org AND t.agent_activation_id IS NOT NULL ORDER BY t.name');
 foreach ($orgs as $org) {
+    $withKey->execute(['org' => (int)$org['id']]);
+    $existing = $withKey->fetchAll();
+    if ($existing !== []) {
+        foreach ($existing as $i => $t) {
+            fwrite(STDOUT, sprintf("  %-40s    already set up: %s (Qualys tag %s, activation ID %s) - Link existing\n",
+                $i === 0 ? (string)$org['name'] : '', (string)$t['name'], $t['qualys_tag_id'] ?? 'none yet - needs one to link', (string)$t['agent_activation_id']));
+        }
+        continue;
+    }
     $suggested = AgentProvisioner::suggestTagName((string)$org['name']);
     $note = '';
     if ($suggested === '') {

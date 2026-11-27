@@ -73,19 +73,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $setup = $newClient()->resume($provId, (int)($_POST['qualys_tag_id'] ?? 0));
                 break;
 
-            case 'cancel':
-                $row = AgentProvisioner::cancel($provId);
+            case 'link':
+                $orgId = (int)($_POST['organisation_id'] ?? 0);
+                $setup = $newClient()->linkExisting($orgId, (int)($_POST['tag_id'] ?? 0), isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null);
+                break;
+
+            case 'unlink':
+                $row = AgentProvisioner::unlink($provId);
                 unset($_SESSION['agent_setup_existing'][$provId]);
-                AuditLog::record('admin.agent_setup_cancelled', [
+                AuditLog::record('admin.agent_setup_unlinked', [
                     'target_type' => 'organisation', 'target_id' => $row['organisation_id'], 'target_label' => $row['tag_name'],
                     'details' => ['qualys_tag_id' => $row['qualys_tag_id'], 'activation_key_id' => $row['activation_key_id']],
                 ]);
-                $left = array_filter([
-                    $row['qualys_tag_id'] !== null ? "tag {$row['tag_name']} (id {$row['qualys_tag_id']})" : null,
-                    $row['activation_key_id'] !== null ? "activation key {$row['activation_key_id']}" : null,
+                Helpers::setFlash("Set-up for {$row['tag_name']} unlinked. Nothing changed in Qualys"
+                    . ($row['local_tag_id'] !== null ? ', and the organisation keeps its tag and Install agent button' : '') . '.');
+                break;
+
+            case 'delete':
+                $before ?? throw new \RuntimeException('That set-up no longer exists.');
+                $newClient()->deleteSetup($provId);
+                unset($_SESSION['agent_setup_existing'][$provId]);
+                AuditLog::record('admin.agent_setup_deleted', [
+                    'target_type' => 'organisation', 'target_id' => $before['organisation_id'], 'target_label' => $before['tag_name'],
+                    'details' => ['qualys_tag_id' => $before['qualys_tag_id'], 'activation_key_id' => $before['activation_key_id'], 'origin' => $before['origin']],
                 ]);
-                Helpers::setFlash("Set-up for {$row['tag_name']} cancelled."
-                    . ($left !== [] ? ' Still in Qualys, to delete there if not wanted: ' . implode(' and ', $left) . '.' : ' Nothing had been created in Qualys.'));
+                Helpers::setFlash("Set-up for {$before['tag_name']} deleted: "
+                    . ($before['origin'] === 'existing_tag' ? 'its activation key was deleted in Qualys; the tag was already there before, so it stays.'
+                        : 'its tag and activation key were deleted in Qualys and here.') . ' The name can be used again.');
                 break;
 
             default:
@@ -94,7 +108,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($setup !== null) {
             unset($_SESSION['agent_setup_existing'][$setup['id']]);
-            AuditLog::record('admin.agent_setup', [
+            AuditLog::record($action === 'link' ? 'admin.agent_setup_linked' : 'admin.agent_setup', [
                 'target_type' => 'organisation', 'target_id' => $setup['organisation_id'], 'target_label' => $setup['tag_name'],
                 'details' => [
                     'qualys_tag_id'     => $setup['qualys_tag_id'],
@@ -103,8 +117,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'used_existing_tag' => $action === 'use_existing',
                 ],
             ]);
-            Helpers::setFlash("{$setup['tag_name']} is set up: Qualys tag {$setup['qualys_tag_id']}, activation key {$setup['activation_key_id']}. "
-                . "The organisation's members now get the Install agent button on the Assets page.");
+            Helpers::setFlash($action === 'link'
+                ? "{$setup['tag_name']} linked: Qualys tag {$setup['qualys_tag_id']}, activation key {$setup['activation_key_id']}. Nothing was created or changed."
+                : "{$setup['tag_name']} is set up: Qualys tag {$setup['qualys_tag_id']}, activation key {$setup['activation_key_id']}. "
+                  . "The organisation's members now get the Install agent button on the Assets page.");
         }
     } catch (AgentTagExistsException $e) {
         // Kept for the page to offer as "use this tag" buttons - only the
@@ -129,7 +145,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     exit;
 }
 
-$list = AgentProvisioner::listForAdmin();
+$orgs = AgentProvisioner::listForAdmin();
 $existingChoices = (array)($_SESSION['agent_setup_existing'] ?? []);
 try {
     $modules = implode(', ', AgentProvisioner::modules());
@@ -141,35 +157,28 @@ try {
 $csrfToken = Helpers::csrfToken();
 $flash = Helpers::getFlash();
 
-/** Status cell and actions for an unfinished set-up - shared by both tables. */
-$renderInProgress = static function (array $s) use ($csrfToken, $existingChoices): void {
+/** A one-button form posting $action for a set-up, with an optional confirm prompt. */
+$button = static function (string $action, int $provId, string $label, string $class, ?string $confirm = null, array $extra = []) use ($csrfToken): void {
     ?>
-    <div class="checkbox-hint">Stopped partway<?= $s['qualys_tag_id'] !== null ? ' - tag ' . (int)$s['qualys_tag_id'] . ' created' : '' ?><?= $s['activation_key_id'] !== null ? ', key ' . (int)$s['activation_key_id'] . ' created' : '' ?>.</div>
-    <?php if ($s['last_error'] !== null): ?><div class="checkbox-hint"><?= Helpers::e($s['last_error']) ?></div><?php endif; ?>
-    <div class="actions-cell">
-        <?php if ($s['qualys_tag_id'] === null): foreach ((array)($existingChoices[$s['id']] ?? []) as $qid => $t): if (!$t['static']) { continue; } ?>
-        <form method="post" onsubmit="return confirm(<?= Helpers::jsAttr("Use the existing Qualys tag {$t['name']} (id {$qid}) for this client? Every agent already carrying it will count as this client's.") ?>);">
-            <input type="hidden" name="action" value="use_existing">
-            <input type="hidden" name="provisioning_id" value="<?= $s['id'] ?>">
-            <input type="hidden" name="qualys_tag_id" value="<?= (int)$qid ?>">
-            <input type="hidden" name="csrf_token" value="<?= Helpers::e($csrfToken) ?>">
-            <button type="submit" class="btn btn-sm btn-secondary">Use existing tag <?= (int)$qid ?></button>
-        </form>
-        <?php endforeach; endif; ?>
-        <form method="post">
-            <input type="hidden" name="action" value="retry">
-            <input type="hidden" name="provisioning_id" value="<?= $s['id'] ?>">
-            <input type="hidden" name="csrf_token" value="<?= Helpers::e($csrfToken) ?>">
-            <button type="submit" class="btn btn-sm btn-primary">Retry</button>
-        </form>
-        <form method="post" onsubmit="return confirm(<?= Helpers::jsAttr("Cancel the set-up for {$s['tag_name']}? Anything already created in Qualys stays there.") ?>);">
-            <input type="hidden" name="action" value="cancel">
-            <input type="hidden" name="provisioning_id" value="<?= $s['id'] ?>">
-            <input type="hidden" name="csrf_token" value="<?= Helpers::e($csrfToken) ?>">
-            <button type="submit" class="btn btn-sm btn-secondary">Cancel</button>
-        </form>
-    </div>
+    <form method="post"<?= $confirm !== null ? ' onsubmit="return confirm(' . Helpers::jsAttr($confirm) . ');"' : '' ?>>
+        <input type="hidden" name="action" value="<?= Helpers::e($action) ?>">
+        <input type="hidden" name="provisioning_id" value="<?= $provId ?>">
+        <?php foreach ($extra as $k => $v): ?><input type="hidden" name="<?= Helpers::e($k) ?>" value="<?= Helpers::e((string)$v) ?>"><?php endforeach; ?>
+        <input type="hidden" name="csrf_token" value="<?= Helpers::e($csrfToken) ?>">
+        <button type="submit" class="btn btn-sm <?= $class ?>"><?= Helpers::e($label) ?></button>
+    </form>
     <?php
+};
+
+/** What Delete would remove, for its confirm prompt. */
+$deletePrompt = static function (array $s): string {
+    $what = $s['origin'] === 'existing_tag'
+        ? ($s['activation_key_id'] !== null ? "activation key {$s['activation_key_id']} in Qualys (the tag {$s['tag_name']} was already there, so it stays)" : 'nothing in Qualys')
+        : implode(' and ', array_filter([
+            $s['activation_key_id'] !== null ? "activation key {$s['activation_key_id']}" : null,
+            $s['qualys_tag_id'] !== null ? "tag {$s['tag_name']} (id {$s['qualys_tag_id']}) - Qualys removes it from every asset carrying it -" : null,
+        ])) . ($s['activation_key_id'] !== null || $s['qualys_tag_id'] !== null ? ' in Qualys, and the tag here' : 'nothing in Qualys');
+    return "Delete the set-up for {$s['tag_name']}? This deletes {$what}. Qualys won't delete a key that agents are still using. This can't be undone.";
 };
 
 $pageTitle = 'Agent Setup';
@@ -189,21 +198,40 @@ require __DIR__ . '/../../src/views/header.php';
 <?php endif; ?>
 
 <div class="panel">
-    <h2>Organisations <span class="checkbox-hint"><?= count($list['organisations']) ?> total</span></h2>
-    <p class="page-subtitle" style="margin-top: 0;">Tag names can use letters, numbers and hyphens only - no spaces. The suggested name can be changed before you create it. Nothing is created if Qualys already has a tag with that name; you'll be asked what to do. New keys: unlimited, licensed for <?= Helpers::e($modules !== '' ? $modules : '-') ?>.</p>
+    <h2>Organisations <span class="checkbox-hint"><?= count($orgs) ?> total</span></h2>
+    <p class="page-subtitle" style="margin-top: 0;">Tag names can use letters, numbers and hyphens only - no spaces. The suggested name can be changed before you create it. Nothing is created if Qualys already has a tag with that name; you'll be asked what to do. Organisations that already have a tag with an activation ID are linked rather than set up again. <strong>Delete</strong> removes a set-up this page created, with its tag and key in Qualys (for tests); <strong>Unlink</strong> only forgets the record. New keys: unlimited, licensed for <?= Helpers::e($modules !== '' ? $modules : '-') ?>.</p>
     <div class="table-wrap">
     <table class="vuln-table admin-table">
         <thead>
             <tr><th>Organisation</th><th>Tag</th><th>Activation ID</th><th>Status</th></tr>
         </thead>
         <tbody>
-            <?php if ($list['organisations'] === []): ?>
+            <?php if ($orgs === []): ?>
             <tr class="empty-row"><td colspan="4">No organisations yet - add one on <a href="/admin/organisations">Organisations</a> first.</td></tr>
-            <?php else: foreach ($list['organisations'] as $org): $s = $org['setup']; ?>
+            <?php else: foreach ($orgs as $org): $s = $org['setup']; ?>
             <tr>
                 <td><strong><?= Helpers::e($org['name']) ?></strong></td>
-                <?php if ($s === null): $suggested = AgentProvisioner::suggestTagName($org['name']); ?>
+                <?php if ($s === null && $org['linkable'] !== []): ?>
                 <td colspan="3">
+                    <div class="checkbox-hint">Already has a tag with an activation ID - record it rather than create another:</div>
+                    <div class="actions-cell">
+                        <?php foreach ($org['linkable'] as $t): ?>
+                        <form method="post" onsubmit="return confirm(<?= Helpers::jsAttr("Link {$t['name']} as this organisation's set-up? Qualys is checked (one call) that activation key {$t['activation_id']} applies this tag; nothing is created or changed.") ?>);">
+                            <input type="hidden" name="action" value="link">
+                            <input type="hidden" name="organisation_id" value="<?= $org['id'] ?>">
+                            <input type="hidden" name="tag_id" value="<?= $t['id'] ?>">
+                            <input type="hidden" name="csrf_token" value="<?= Helpers::e($csrfToken) ?>">
+                            <button type="submit" class="btn btn-sm btn-primary">Link existing: <?= Helpers::e($t['name']) ?></button>
+                        </form>
+                        <?php endforeach; ?>
+                    </div>
+                    <div class="checkbox-hint mono"><?php foreach ($org['linkable'] as $t): ?><?= Helpers::e($t['name']) ?>: tag <?= Helpers::e($t['qualys_tag_id']) ?>, <?= Helpers::e($t['activation_id']) ?><br><?php endforeach; ?></div>
+                </td>
+                <?php elseif ($s === null): $suggested = AgentProvisioner::suggestTagName($org['name']); ?>
+                <td colspan="3">
+                    <?php if ($org['tags'] !== []): ?>
+                    <div class="checkbox-hint">Its current tags (<?= Helpers::e(implode(', ', array_column($org['tags'], 'name'))) ?>) have no activation ID, so this adds a new tag alongside them.</div>
+                    <?php endif; ?>
                     <form method="post" class="inline-form-row" onsubmit="return confirm('Create this tag and an activation key in Qualys?');">
                         <input type="hidden" name="action" value="start">
                         <input type="hidden" name="organisation_id" value="<?= $org['id'] ?>">
@@ -219,9 +247,30 @@ require __DIR__ . '/../../src/views/header.php';
                 <td class="mono"><?= $s['activation_key'] !== null ? Helpers::e($s['activation_key']) . '<div class="checkbox-hint">Key ' . $s['activation_key_id'] . '</div>' : '-' ?></td>
                 <td>
                     <?php if ($s['status'] === 'complete'): ?>
-                    <span class="badge badge-active">Set up</span>
+                    <span class="badge badge-active"><?= $s['origin'] === 'linked' ? 'Linked' : 'Set up' ?></span>
                     <div class="checkbox-hint"><?= Helpers::e(Helpers::displayDateTime($s['completed_at'], 'Y-m-d H:i')) ?></div>
-                    <?php else: $renderInProgress($s); endif; ?>
+                    <?php else: ?>
+                    <div class="checkbox-hint">Stopped partway<?= $s['qualys_tag_id'] !== null ? ' - tag ' . $s['qualys_tag_id'] . ($s['origin'] === 'existing_tag' ? ' chosen' : ' created') : '' ?><?= $s['activation_key_id'] !== null ? ', key ' . $s['activation_key_id'] . ' created' : '' ?>.</div>
+                    <?php endif; ?>
+                    <?php if ($s['last_error'] !== null): ?><div class="checkbox-hint"><?= Helpers::e($s['last_error']) ?></div><?php endif; ?>
+                    <div class="actions-cell">
+                        <?php if ($s['status'] !== 'complete'):
+                            if ($s['qualys_tag_id'] === null) {
+                                foreach ((array)($existingChoices[$s['id']] ?? []) as $qid => $t) {
+                                    if ($t['static']) {
+                                        $button('use_existing', $s['id'], "Use existing tag {$qid}", 'btn-secondary',
+                                            "Use the existing Qualys tag {$t['name']} (id {$qid}) for this client? Every agent already carrying it will count as this client's.",
+                                            ['qualys_tag_id' => $qid]);
+                                    }
+                                }
+                            }
+                            $button('retry', $s['id'], 'Retry', 'btn-primary');
+                        endif; ?>
+                        <?php if ($s['origin'] !== 'linked') { $button('delete', $s['id'], 'Delete', 'btn-danger', $deletePrompt($s)); } ?>
+                        <?php if ($s['status'] === 'complete') {
+                            $button('unlink', $s['id'], 'Unlink', 'btn-secondary', "Unlink {$s['tag_name']}? Only this page's record is removed: the tag, key and the organisation's Install agent button stay as they are.");
+                        } ?>
+                    </div>
                 </td>
                 <?php endif; ?>
             </tr>
@@ -230,26 +279,5 @@ require __DIR__ . '/../../src/views/header.php';
     </table>
     </div>
 </div>
-
-<?php if ($list['orphans'] !== []): ?>
-<div class="panel">
-    <h2>Set-ups for deleted organisations</h2>
-    <p class="page-subtitle" style="margin-top: 0;">Their tags and keys still exist in Qualys, so these names stay taken.</p>
-    <div class="table-wrap">
-    <table class="vuln-table admin-table">
-        <thead><tr><th>Tag</th><th>Activation ID</th><th>Status</th></tr></thead>
-        <tbody>
-            <?php foreach ($list['orphans'] as $s): ?>
-            <tr>
-                <td class="mono"><?= Helpers::e($s['tag_name']) ?><?php if ($s['qualys_tag_id'] !== null): ?><div class="checkbox-hint">Qualys tag <?= $s['qualys_tag_id'] ?></div><?php endif; ?></td>
-                <td class="mono"><?= $s['activation_key'] !== null ? Helpers::e($s['activation_key']) : '-' ?></td>
-                <td><?php if ($s['status'] === 'complete'): ?><span class="badge badge-active">Set up</span><?php else: $renderInProgress($s); endif; ?></td>
-            </tr>
-            <?php endforeach; ?>
-        </tbody>
-    </table>
-    </div>
-</div>
-<?php endif; ?>
 
 <?php require __DIR__ . '/../../src/views/footer.php'; ?>

@@ -14,14 +14,21 @@
 --
 -- Uniqueness is enforced here, not left to Qualys (which doesn't promise
 -- unique tag names, and doesn't make key titles unique at all):
---   - organisation_id: one set-up per organisation. ON DELETE SET NULL keeps
---     the row when an organisation is deleted - the tag and key still exist
---     in Qualys, so the name must stay taken. MySQL's UNIQUE allows any
---     number of NULLs.
+--   - organisation_id: one set-up per organisation. Deleting the
+--     organisation deletes its set-up row (the tag and key stay in Qualys,
+--     where the duplicate check still sees them) - a name is never retired
+--     just for having been used.
 --   - tag_name: the column's utf8mb4_0900_ai_ci collation compares
 --     case-insensitively, so Acme-Agents and acme-agents can't both exist.
 --   - qualys_tag_id, activation_key_id, activation_key, local_tag_id: no two
 --     clients can share a tag or a key.
+--
+-- origin says what Delete may remove from Qualys, so it never deletes
+-- anything this page didn't make: 'created' = this page made the tag and
+-- key (both deleted, e.g. after a test); 'existing_tag' = the admin chose an
+-- existing Qualys tag and this page made only the key (only the key is
+-- deleted); 'linked' = an existing tag and key recorded with Link existing
+-- (nothing deleted in Qualys - only ever unlinked).
 --
 -- Idempotent: CREATE TABLE IF NOT EXISTS, safe to run more than once.
 -- Additive only - nothing existing is altered.
@@ -29,13 +36,14 @@
 
 CREATE TABLE IF NOT EXISTS agent_provisioning (
     id                 INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    organisation_id    INT UNSIGNED NULL,
+    organisation_id    INT UNSIGNED NOT NULL,
     tag_name           VARCHAR(191) NOT NULL,
     qualys_tag_id      BIGINT UNSIGNED NULL,
     activation_key_id  BIGINT UNSIGNED NULL,
     activation_key     CHAR(36) NULL,
     local_tag_id       INT UNSIGNED NULL,
     status             ENUM('in_progress','complete') NOT NULL DEFAULT 'in_progress',
+    origin             ENUM('created','existing_tag','linked') NOT NULL DEFAULT 'created',
     last_error         TEXT NULL,
     created_by         INT UNSIGNED NULL,
     created_at         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -48,7 +56,7 @@ CREATE TABLE IF NOT EXISTS agent_provisioning (
     UNIQUE KEY uq_agent_prov_key (activation_key),
     UNIQUE KEY uq_agent_prov_local_tag (local_tag_id),
     KEY fk_agent_prov_user (created_by),
-    CONSTRAINT fk_agent_prov_org       FOREIGN KEY (organisation_id) REFERENCES organisations (id) ON DELETE SET NULL,
+    CONSTRAINT fk_agent_prov_org       FOREIGN KEY (organisation_id) REFERENCES organisations (id) ON DELETE CASCADE,
     CONSTRAINT fk_agent_prov_local_tag FOREIGN KEY (local_tag_id)    REFERENCES tags (id)          ON DELETE SET NULL,
     CONSTRAINT fk_agent_prov_user      FOREIGN KEY (created_by)      REFERENCES users (id)         ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

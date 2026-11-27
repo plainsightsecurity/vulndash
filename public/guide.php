@@ -506,8 +506,11 @@ require __DIR__ . '/../src/views/header.php';
     <ul>
         <li><strong>Tag name</strong> - suggested from the organisation's name with <code>-Agents</code> added, e.g. <code>Plainsight-Security-Agents</code>. You can change it before creating, but it can only use letters, numbers and hyphens - no spaces. The key gets the same name, so the two are easy to match up in Qualys.</li>
         <li><strong>One per client</strong> - each organisation gets one tag and one key, and no two clients can share a tag name (whatever the capitals), tag or key.</li>
-        <li><strong>Name already in Qualys</strong> - nothing is created. You can use the existing tag for this client (only if it's a static tag no other client has), or <strong>Cancel</strong> and choose another name. A key with the same name stops the set-up the same way.</li>
-        <li><strong>Retry</strong> - if a set-up stops partway (a Qualys error or limit), Retry carries on from what was already created; it never makes a second tag or key. <strong>Cancel</strong> removes the set-up here, but anything already created in Qualys stays there for you to delete.</li>
+        <li><strong>Name already in Qualys</strong> - nothing is created. You can use the existing tag for this client (only if it's a static tag no other client has), or <strong>Delete</strong> the set-up and choose another name. A key with the same name stops the set-up the same way.</li>
+        <li><strong>Already set up by hand</strong> - an organisation that already has a tag with an activation ID gets <strong>Link existing</strong> instead of a new set-up. It checks in Qualys that the key applies the tag, then records it. Nothing is created or changed.</li>
+        <li><strong>Retry</strong> - if a set-up stops partway (a Qualys error or limit), Retry carries on from what was already created; it never makes a second tag or key.</li>
+        <li><strong>Delete</strong> - for set-ups made on this page, such as a test: deletes its activation key and tag in Qualys (not a tag that existed before) and the tag here, so the name can be used again. Qualys won't delete a key that agents are still using. Linked set-ups can't be deleted from here.</li>
+        <li><strong>Unlink</strong> - forgets the set-up without changing anything else; the organisation keeps its tag and Install agent button.</li>
     </ul>
     <p>Each set-up uses about four Qualys API calls, each on its own daily limit, and they show on API Usage.</p>
 </section>

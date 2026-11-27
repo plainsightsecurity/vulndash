@@ -89,6 +89,41 @@ final class FakeQualys implements AgentProvisioningApi
         $this->call('getKey');
         return $this->keys[$keyId] ?? null;
     }
+
+    public function findActivationKeyByUuid(string $activationKey): ?array
+    {
+        $this->call('findKey');
+        foreach ($this->keys as $k) {
+            if ($k['activation_key'] === strtolower($activationKey)) {
+                return $k;
+            }
+        }
+        return null;
+    }
+
+    public function getTag(int $tagId): ?array
+    {
+        $this->call('getTag');
+        return $this->tags[$tagId] ?? null;
+    }
+
+    public function deleteActivationKey(int $keyId): void
+    {
+        $this->call('deleteKey');
+        if (!isset($this->keys[$keyId])) {
+            throw new \RuntimeException('Qualys Delete Activation Key returned NOT_FOUND');
+        }
+        unset($this->keys[$keyId]);
+    }
+
+    public function deleteTag(int $tagId): void
+    {
+        $this->call('deleteTag');
+        if (!isset($this->tags[$tagId])) {
+            throw new \RuntimeException('Qualys Delete Tag returned NOT_FOUND');
+        }
+        unset($this->tags[$tagId]);
+    }
 }
 
 /** Organisation "Plainsight Security" (id returned) on the standard estate. */
@@ -258,7 +293,7 @@ test('a spelling clash with a different local tag stops before anything is wired
     $e = throws(fn () => (new P($q))->start($org, 'Plainsight-Security-Agents', 1));
     ok(str_contains($e->getMessage(), 'different tag'), 'says why');
     eq(Org::get($org)['tag_ids'], [], 'organisation untouched');
-    eq(P::listForAdmin()['organisations'][0]['setup']['status'], 'in_progress');
+    eq(P::listForAdmin()[0]['setup']['status'], 'in_progress');
 });
 
 // --- resuming -----------------------------------------------------------------
@@ -268,7 +303,7 @@ test('retry after a failed key create reuses the tag it already made', function 
     $q = new FakeQualys();
     $q->failNext['createKey'] = 'Qualys Create Activation Key returned UNAUTHORIZED';
     $e = throws(fn () => (new P($q))->start($org, 'Plainsight-Security-Agents', 1));
-    $row = P::listForAdmin()['organisations'][0]['setup'];
+    $row = P::listForAdmin()[0]['setup'];
     ok($row['qualys_tag_id'] !== null, 'tag id saved straight away');
     eq($row['last_error'], $e->getMessage());
 
@@ -286,7 +321,7 @@ test('a key whose create response was lost is found again, not made twice', func
     $q->loseKeyResponse = true;
     throws(fn () => (new P($q))->start($org, 'Plainsight-Security-Agents', 1));
     eq(count($q->keys), 1, 'Qualys did make the key');
-    $row = P::listForAdmin()['organisations'][0]['setup'];
+    $row = P::listForAdmin()[0]['setup'];
     eq($row['activation_key_id'], null, 'but we never saw its id');
 
     $q->calls = [];
@@ -302,7 +337,7 @@ test('a key Qualys shows without the tag isn\'t accepted until the tag is on it'
     $q->dropKeyTag = true;
     $e = throws(fn () => (new P($q))->start($org, 'Plainsight-Security-Agents', 1));
     ok(str_contains($e->getMessage(), 'without tag'), 'says why');
-    $row = P::listForAdmin()['organisations'][0]['setup'];
+    $row = P::listForAdmin()[0]['setup'];
     ok($row['activation_key_id'] !== null, 'key id saved');
     eq($row['local_tag_id'], null, 'nothing wired locally');
 
@@ -314,29 +349,133 @@ test('a key Qualys shows without the tag isn\'t accepted until the tag is on it'
     eq(count($q->keys), 1);
 });
 
-test('cancel removes only an unfinished set-up', function () {
-    $org = seed_setup_org();
-    $q = new FakeQualys();
-    $q->failNext['createKey'] = 'boom';
-    throws(fn () => (new P($q))->start($org, 'Plainsight-Security-Agents', 1));
-    $row = P::cancel(P::listForAdmin()['organisations'][0]['setup']['id']);
-    ok($row['qualys_tag_id'] !== null, 'reports what Qualys still has');
-    eq(prov_count(), 0);
+// --- link, unlink, delete -------------------------------------------------------
 
-    $done = (new P($q))->start($org, 'Plainsight-Security-Agents2', 1);
-    throws(fn () => P::cancel($done['id']));
-    eq(prov_count(), 1);
+/** Org with an existing hand-made tag (local 80, Qualys 4001) and key applying it. */
+function seed_existing_setup(FakeQualys $q, bool $keyAppliesTag = true): array
+{
+    $org = seed_setup_org('FaiceTech');
+    $q->tags[4001] = ['name' => 'FaiceTechAgents', 'ruleType' => null, 'ruleText' => null, 'srcAssetGroupId' => null, 'parentTagId' => null, 'other' => []];
+    $keyId = $q->addKey('FaiceTech', $keyAppliesTag ? [4001] : [999]);
+    $uuid = $q->keys[$keyId]['activation_key'];
+    $pdo = Database::getConnection();
+    $pdo->prepare("INSERT INTO tags (id, qualys_tag_id, name, agent_activation_id) VALUES (80, '4001', 'FaiceTechAgents', ?)")->execute([$uuid]);
+    $pdo->exec("INSERT INTO organisation_tags (organisation_id, tag_id) VALUES ($org, 80)");
+    return [$org, $keyId, $uuid];
+}
+
+test('an organisation that already has a tag and key is offered Link, not Create', function () {
+    $q = new FakeQualys();
+    [$org] = seed_existing_setup($q);
+    $list = P::listForAdmin();
+    eq($list[0]['setup'], null);
+    eq(array_column($list[0]['linkable'], 'id'), [80]);
+    $e = throws(fn () => (new P($q))->start($org, 'FaiceTech-Agents', 1));
+    ok(str_contains($e->getMessage(), 'Link existing'), 'points at Link');
+    eq($q->calls, [], 'nothing sent to Qualys');
 });
 
-test('deleting the organisation keeps its set-up, so the name stays taken', function () {
+test('Link existing records the set-up and changes nothing', function () {
+    $q = new FakeQualys();
+    [$org, $keyId, $uuid] = seed_existing_setup($q);
+    $tagsBefore = $q->tags;
+    $keysBefore = $q->keys;
+    $row = (new P($q))->linkExisting($org, 80, 1);
+    eq($q->calls, ['findKey'], 'one read-only call');
+    eq([$row['status'], $row['origin'], $row['tag_name'], $row['qualys_tag_id'], $row['activation_key_id'], $row['activation_key'], $row['local_tag_id']],
+       ['complete', 'linked', 'FaiceTechAgents', 4001, $keyId, $uuid, 80]);
+    eq($q->tags, $tagsBefore);
+    eq($q->keys, $keysBefore);
+    eq(Database::getConnection()->query('SELECT agent_activation_id FROM tags WHERE id = 80')->fetchColumn(), $uuid, 'activation ID untouched');
+    eq(P::listForAdmin()[0]['linkable'], [], 'no longer offered');
+
+    // A linked set-up can't be deleted from here, only unlinked.
+    throws(fn () => (new P($q))->deleteSetup($row['id']));
+    eq($q->tags, $tagsBefore);
+    P::unlink($row['id']);
+    eq(prov_count(), 0);
+    eq(Org::get($org)['tag_ids'], [80], 'organisation keeps its tag');
+});
+
+test('Link refuses a key that doesn\'t apply the tag, or an unknown activation ID', function () {
+    $q = new FakeQualys();
+    [$org, $keyId] = seed_existing_setup($q, false);
+    $e = throws(fn () => (new P($q))->linkExisting($org, 80, 1));
+    ok(str_contains($e->getMessage(), "doesn't apply tag"), $e->getMessage());
+    unset($q->keys[$keyId]);
+    $e = throws(fn () => (new P($q))->linkExisting($org, 80, 1));
+    ok(str_contains($e->getMessage(), 'no activation key'), $e->getMessage());
+    eq(prov_count(), 0);
+});
+
+test('Delete removes a test set-up everywhere and frees the name, repeatably', function () {
+    $org = seed_setup_org();
+    $q = new FakeQualys();
+    $pdo = Database::getConnection();
+    for ($i = 0; $i < 3; $i++) {
+        $row = (new P($q))->start($org, 'Plainsight-Security-Agents', 1);
+        $pdo->exec("INSERT INTO user_tags (user_id, tag_id) VALUES (2, {$row['local_tag_id']})");
+        $q->calls = [];
+        (new P($q))->deleteSetup($row['id']);
+        eq($q->calls, ['deleteKey', 'deleteTag'], "run $i: key first, then tag");
+        eq([$q->tags, $q->keys], [[], []], "run $i: gone from Qualys");
+        eq(prov_count(), 0, "run $i: record gone");
+        eq((int)$pdo->query("SELECT COUNT(*) FROM tags WHERE name = 'Plainsight-Security-Agents'")->fetchColumn(), 0, "run $i: local tag gone");
+        eq(Org::get($org)['tag_ids'], [], "run $i: organisation link gone");
+    }
+    eq((int)$pdo->query('SELECT COUNT(*) FROM user_tags WHERE user_id = 2')->fetchColumn(), 1, 'the client keeps only its own original tag');
+});
+
+test('Delete stops at a key Qualys won\'t delete, and carries on next time', function () {
+    $org = seed_setup_org();
+    $q = new FakeQualys();
+    $row = (new P($q))->start($org, 'Plainsight-Security-Agents', 1);
+    $q->failNext['deleteKey'] = 'Qualys Delete Activation Key returned INVALID_REQUEST: key has active agents';
+    $e = throws(fn () => (new P($q))->deleteSetup($row['id']));
+    ok(str_contains($e->getMessage(), 'active agents'), 'Qualys reason shown');
+    eq(count($q->tags), 1, 'tag left alone');
+    ok(str_contains((string)P::get($row['id'])['last_error'], 'Delete stopped'), 'recorded');
+
+    // The key goes, then the tag delete fails; a re-run doesn't retry the key.
+    $q->failNext['deleteTag'] = 'timeout';
+    throws(fn () => (new P($q))->deleteSetup($row['id']));
+    eq(P::get($row['id'])['activation_key_id'], null, 'key deletion saved');
+    $q->calls = [];
+    (new P($q))->deleteSetup($row['id']);
+    eq($q->calls, ['deleteTag']);
+    eq(prov_count(), 0);
+
+    // Something already deleted in Qualys by hand counts as deleted.
+    $row = (new P($q))->start($org, 'Plainsight-Security-Agents', 1);
+    $q->keys = [];
+    $q->tags = [];
+    (new P($q))->deleteSetup($row['id']);
+    eq(prov_count(), 0);
+});
+
+test('Delete of a set-up that used an existing tag deletes only its own key', function () {
+    $org = seed_setup_org();
+    $q = new FakeQualys();
+    $existing = $q->addTag('Plainsight-Security-Agents');
+    $e = throws(fn () => (new P($q))->start($org, 'Plainsight-Security-Agents', 1), AgentTagExistsException::class);
+    $row = (new P($q))->resume($e->provisioningId, $existing);
+    eq($row['origin'], 'existing_tag');
+    $q->calls = [];
+    (new P($q))->deleteSetup($row['id']);
+    eq($q->calls, ['deleteKey'], 'tag not deleted');
+    ok(isset($q->tags[$existing]), 'tag still in Qualys');
+    eq(Database::getConnection()->query("SELECT agent_activation_id FROM tags WHERE id = {$row['local_tag_id']}")->fetchColumn(), null, 'deleted key no longer offered');
+});
+
+test('deleting an organisation deletes its set-up record, freeing the name', function () {
     $org = seed_setup_org();
     $q = new FakeQualys();
     (new P($q))->start($org, 'Plainsight-Security-Agents', 1);
     Org::delete($org);
-    $list = P::listForAdmin();
-    eq(count($list['orphans']), 1);
+    eq(prov_count(), 0);
+    // The tag is still in Qualys, so reusing the name goes to the admin's choice.
     $org2 = Org::create('New Name', [], null);
-    throws(fn () => (new P($q))->start($org2, 'Plainsight-Security-Agents', 1));
+    throws(fn () => (new P($q))->start($org2, 'Plainsight-Security-Agents', 1), AgentTagExistsException::class);
 });
 
 // --- parsing Qualys's key responses -----------------------------------------
@@ -387,11 +526,39 @@ test('Agent Setup page: a Qualys failure leaves a retryable set-up and logs the 
     // tests/config.test.php points Qualys at a closed port.
     $out = render_page('admin/agent_setup.php', '', 'admin', "action=start&organisation_id={$org}&tag_name=Plainsight-Security-Agents");
     ok(!str_contains($out, 'PHPERR'), $out);
-    $row = P::listForAdmin()['organisations'][0]['setup'];
+    $row = P::listForAdmin()[0]['setup'];
     eq($row['status'], 'in_progress');
     ok(str_contains((string)$row['last_error'], 'Qualys'), 'error kept: ' . $row['last_error']);
     eq(Database::getConnection()->query('SELECT endpoint FROM qualys_api_call_log')->fetchColumn(), '/qps/rest/2.0/search/am/tag', 'call logged');
 
     $page = render_page('admin/agent_setup.php');
     ok(str_contains($page, 'Retry') && str_contains($page, 'Stopped partway'), 'offers Retry');
+});
+
+test('Agent Setup page: Link, Delete and Unlink render and act', function () {
+    $q = new FakeQualys();
+    [$org] = seed_existing_setup($q);
+    $other = Org::create('Wavehill Ltd', [], null);
+    $pdo = Database::getConnection();
+    $pdo->exec("INSERT INTO tags (id, qualys_tag_id, name, agent_activation_id) VALUES (90, '5001', 'Wavehill-Ltd-Agents', '00000000-0000-4000-8000-000000000090')");
+    $pdo->exec("INSERT INTO agent_provisioning (id, organisation_id, tag_name, qualys_tag_id, activation_key_id, activation_key, local_tag_id, status, completed_at)
+                VALUES (5, $other, 'Wavehill-Ltd-Agents', 5001, 6001, '00000000-0000-4000-8000-000000000090', 90, 'complete', NOW())");
+
+    $out = render_page('admin/agent_setup.php');
+    ok(!str_contains($out, 'PHPERR'), $out);
+    ok(str_contains($out, 'Link existing: FaiceTechAgents'), 'Link offered');
+    ok(!str_contains($out, 'value="FaiceTech-Agents"'), 'no Create for an organisation already set up');
+    ok(str_contains($out, '>Delete<') && str_contains($out, '>Unlink<'), 'Delete and Unlink offered');
+
+    // Qualys is unreachable in tests: Link and Delete fail safely, changing nothing.
+    render_page('admin/agent_setup.php', '', 'admin', "action=link&organisation_id={$org}&tag_id=80");
+    eq(prov_count(), 1, 'nothing linked');
+    render_page('admin/agent_setup.php', '', 'admin', 'action=delete&provisioning_id=5');
+    ok(str_contains((string)P::get(5)['last_error'], 'Delete stopped'), 'delete failure recorded');
+    eq((int)$pdo->query('SELECT COUNT(*) FROM tags WHERE id = 90')->fetchColumn(), 1, 'local tag kept');
+
+    render_page('admin/agent_setup.php', '', 'admin', 'action=unlink&provisioning_id=5');
+    eq(prov_count(), 0, 'unlinked');
+    eq((int)$pdo->query('SELECT COUNT(*) FROM tags WHERE id = 90')->fetchColumn(), 1, 'unlink keeps the tag');
+    eq(audit_rows()[count(audit_rows()) - 1][0], 'admin.agent_setup_unlinked');
 });

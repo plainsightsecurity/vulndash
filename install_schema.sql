@@ -14,27 +14,28 @@ DROP TABLE IF EXISTS `agent_provisioning`;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `agent_provisioning` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,
-  `organisation_id` int unsigned DEFAULT NULL,
+  `organisation_id` int unsigned NOT NULL,
   `tag_name` varchar(191) NOT NULL,
   `qualys_tag_id` bigint unsigned DEFAULT NULL,
   `activation_key_id` bigint unsigned DEFAULT NULL,
   `activation_key` char(36) DEFAULT NULL,
   `local_tag_id` int unsigned DEFAULT NULL,
   `status` enum('in_progress','complete') NOT NULL DEFAULT 'in_progress',
+  `origin` enum('created','existing_tag','linked') NOT NULL DEFAULT 'created',
   `last_error` text,
   `created_by` int unsigned DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `completed_at` datetime DEFAULT NULL,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_agent_prov_tag_name` (`tag_name`),
   UNIQUE KEY `uq_agent_prov_org` (`organisation_id`),
+  UNIQUE KEY `uq_agent_prov_tag_name` (`tag_name`),
   UNIQUE KEY `uq_agent_prov_qualys_tag` (`qualys_tag_id`),
   UNIQUE KEY `uq_agent_prov_key_id` (`activation_key_id`),
   UNIQUE KEY `uq_agent_prov_key` (`activation_key`),
   UNIQUE KEY `uq_agent_prov_local_tag` (`local_tag_id`),
   KEY `fk_agent_prov_user` (`created_by`),
   CONSTRAINT `fk_agent_prov_local_tag` FOREIGN KEY (`local_tag_id`) REFERENCES `tags` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `fk_agent_prov_org` FOREIGN KEY (`organisation_id`) REFERENCES `organisations` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_agent_prov_org` FOREIGN KEY (`organisation_id`) REFERENCES `organisations` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_agent_prov_user` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;

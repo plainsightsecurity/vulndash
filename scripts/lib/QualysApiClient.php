@@ -1176,7 +1176,7 @@ class QualysApiClient implements \VulnDash\Lib\AgentProvisioningApi
                 // Path only: the on-demand scan call carries its options in
                 // a query string, which must not split its log rows (or the
                 // API usage page's columns) by option.
-                'endpoint'             => (string)parse_url($url, PHP_URL_PATH),
+                'endpoint'             => $budgetKey,
                 'api_version'          => $this->apiVersionForBudgetKey($budgetKey),
                 'called_at'            => date('Y-m-d H:i:s'),
                 'http_status'          => $ok !== false ? $httpCode : null,
@@ -1548,6 +1548,55 @@ class QualysApiClient implements \VulnDash\Lib\AgentProvisioningApi
         }
     }
 
+    /** @return array{id: int, title: string, activation_key: string, tag_ids: int[]}|null */
+    public function findActivationKeyByUuid(string $activationKey): ?array
+    {
+        $body = '<?xml version="1.0" encoding="UTF-8"?>'
+            . '<ServiceRequest><filters><Criteria field="activationKey" operator="EQUALS">'
+            . htmlspecialchars(strtolower(trim($activationKey)), ENT_XML1) . '</Criteria></filters></ServiceRequest>';
+        $tmp = $this->postQpsToFile('/qps/rest/1.0/search/ca/agentactkey/', $body);
+        try {
+            $keys = array_filter(
+                $this->parseActivationKeys($this->qpsSuccessXml($tmp, 'Search Activation Keys')),
+                static fn (array $k): bool => $k['activation_key'] === strtolower(trim($activationKey))
+            );
+            return $keys !== [] ? reset($keys) : null;
+        } finally {
+            @unlink($tmp);
+        }
+    }
+
+    /** One tag by id via Search Tags (one call), or null if Qualys has none. */
+    public function getTag(int $tagId): ?array
+    {
+        return $this->searchTagsByIds([$tagId])[$tagId] ?? null;
+    }
+
+    /**
+     * POST /qps/rest/1.0/delete/ca/agentactkey/<id>. Qualys refuses to delete
+     * a key that still has active agents; that refusal is thrown as-is.
+     */
+    public function deleteActivationKey(int $keyId): void
+    {
+        $tmp = $this->postQpsToFile('/qps/rest/1.0/delete/ca/agentactkey/' . $keyId, '<?xml version="1.0" encoding="UTF-8"?><ServiceRequest></ServiceRequest>');
+        try {
+            $this->assertQpsSuccess($tmp, 'Delete Activation Key');
+        } finally {
+            @unlink($tmp);
+        }
+    }
+
+    /** POST /qps/rest/2.0/delete/am/tag/<id>. Qualys removes the tag from every asset. */
+    public function deleteTag(int $tagId): void
+    {
+        $tmp = $this->postQpsToFile('/qps/rest/2.0/delete/am/tag/' . $tagId, '<?xml version="1.0" encoding="UTF-8"?><ServiceRequest></ServiceRequest>');
+        try {
+            $this->assertQpsSuccess($tmp, 'Delete Tag');
+        } finally {
+            @unlink($tmp);
+        }
+    }
+
     /**
      * <AgentActKey> elements as id => key. A key without an id or a UUID
      * activationKey is skipped: nothing could be installed with it. Tags are
@@ -1799,11 +1848,13 @@ class QualysApiClient implements \VulnDash\Lib\AgentProvisioningApi
      * below 6. So the key is the request path without its query string,
      * e.g. '/api/4.0/fo/asset/host/vm/detection/'. Continuation pages share
      * their first page's path, so they land on the same key. QPS paths
-     * (/qps/rest/...) are used as-is.
+     * (/qps/rest/...) are used as-is, less any trailing record id.
      */
     private function budgetKeyForUrl(string $url): string
     {
-        return (string)parse_url($url, PHP_URL_PATH);
+        // A trailing record id (the delete calls: .../agentactkey/59001) is
+        // dropped, so every delete shares one key and one API usage row.
+        return (string)preg_replace('#/\d+$#', '/', (string)parse_url($url, PHP_URL_PATH));
     }
 
     /**

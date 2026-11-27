@@ -41,4 +41,16 @@ interface AgentProvisioningApi
 
     /** @return array{id: int, title: string, activation_key: string, tag_ids: int[]}|null null if Qualys has no key with that id */
     public function getActivationKey(int $keyId): ?array;
+
+    /** @return array{id: int, title: string, activation_key: string, tag_ids: int[]}|null the key with this activation ID (UUID), or null */
+    public function findActivationKeyByUuid(string $activationKey): ?array;
+
+    /** @return array<string, mixed>|null the tag with this id, or null if Qualys has none */
+    public function getTag(int $tagId): ?array;
+
+    /** Deletes an activation key. Qualys refuses while active agents use it. */
+    public function deleteActivationKey(int $keyId): void;
+
+    /** Deletes a tag - Qualys removes it from every asset carrying it. */
+    public function deleteTag(int $tagId): void;
 }
