@@ -16,6 +16,10 @@ return [
     ],
     'security' => ['mfa_encryption_key' => base64_encode(str_repeat('k', 32))],
     'resend'   => ['api_key' => ''],
+    // Disk alerts at 99% so this machine's real disk space can't add an email
+    // to tests that run scripts/send_sync_alerts.php; ServerHealthTest sets
+    // its own threshold and figures.
+    'alerts'   => ['disk_warn_percent' => 99],
     'qualys' => [
         'api_base_url' => 'http://127.0.0.1:9',
         'username' => 'test', 'password' => 'test',

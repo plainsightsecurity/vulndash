@@ -47,6 +47,7 @@ test('reads real disks and the database size', function () {
 
 test('alerts at 85%, once; reminder after 24h; recovery only below 80%', function () {
     seed_estate();
+    set_config('alerts.disk_warn_percent', 85);   // the default (tests/config.test.php uses 99)
     $t = time();
     eq(disk_mail(fn () => ServerHealthAlerts::check($t, false, fake_disk(84.9)))[1], [], 'under the line: nothing');
 

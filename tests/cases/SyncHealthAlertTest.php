@@ -185,7 +185,7 @@ test('the script: dry run, real run, exit codes', function () {
     [$code, $out, $n] = $run([]);
     ok($code === 0 && $n === 1 && str_contains($out, 'Emailed: admin@test'), $out);
     [$code, $out, $n] = $run([]);
-    ok($code === 0 && $n === 0 && str_contains($out, 'Nothing new to report'), $out);
+    ok($code === 0 && $n === 0 && str_contains($out, 'Syncs: nothing new to report'), $out);
 });
 
 /** Both exploit-intel feeds loaded $kevHoursAgo / $epssHoursAgo hours ago. */
