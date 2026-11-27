@@ -75,3 +75,20 @@ test('not root: no guard at all', function () {
     proc_close($proc);
     ok(!str_contains($out, 'Refusing to run as root'), $out);
 });
+
+test('LockFile: opens an existing lock read-only, still excludes a second holder', function () {
+    $path = sys_get_temp_dir() . '/vdlocktest_' . bin2hex(random_bytes(4)) . '.lock';
+    try {
+        $a = \VulnDash\Lib\LockFile::open($path);           // creates it
+        ok($a !== false && is_file($path), 'created');
+        eq(substr(sprintf('%o', fileperms($path)), -4), '0666', 'world-writable, like before');
+        ok(flock($a, LOCK_EX | LOCK_NB), 'first holder locks');
+        $b = \VulnDash\Lib\LockFile::open($path);           // exists: opened read-only
+        ok($b !== false, 'second open works');
+        ok(!flock($b, LOCK_EX | LOCK_NB), 'but cannot take the lock while held');
+        flock($a, LOCK_UN);
+        ok(flock($b, LOCK_EX | LOCK_NB), 'and can once released');
+    } finally {
+        @unlink($path);
+    }
+});

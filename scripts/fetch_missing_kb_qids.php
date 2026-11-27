@@ -68,7 +68,7 @@ if ($dryRun) {
 }
 
 $lockPath = sys_get_temp_dir() . '/vulndash_kb_sync.lock';
-$lockHandle = fopen($lockPath, 'c');
+$lockHandle = \VulnDash\Lib\LockFile::open($lockPath);
 if ($lockHandle === false) {
     fwrite(STDERR, "Could not open lock file {$lockPath} - check its ownership/permissions.\n");
     exit(1);

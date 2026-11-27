@@ -60,7 +60,7 @@ $signInUrl = $baseUrl . '/login';
 
 // --- single-instance lock (mirrors sync_exploit_intel.php) ------------------
 $lockPath   = sys_get_temp_dir() . '/vulndash_send_notifications.lock';
-$lockHandle = fopen($lockPath, 'c');
+$lockHandle = \VulnDash\Lib\LockFile::open($lockPath);
 if ($lockHandle === false) {
     fwrite(STDERR, "Could not open lock file {$lockPath} - check its ownership/permissions.\n");
     exit(1);

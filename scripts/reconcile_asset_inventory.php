@@ -306,7 +306,7 @@ $allowMassRemoval = array_key_exists('allow-mass-removal', $options);
 // sync scripts, own lock file since this is a separate job on its own
 // schedule.
 $lockPath = sys_get_temp_dir() . '/vulndash_asset_inventory_reconcile.lock';
-$lockHandle = fopen($lockPath, 'c');
+$lockHandle = \VulnDash\Lib\LockFile::open($lockPath);
 if ($lockHandle === false) {
     fwrite(STDERR, "Could not open lock file {$lockPath} - check its ownership/permissions (this is a real error, not a normal overlapping-run skip).\n");
     exit(1);

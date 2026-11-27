@@ -258,7 +258,7 @@ if (array_key_exists('dry-run-prune', $options)) {
 // Guard against two invocations overlapping - see sync_knowledge_base.php
 // for the same pattern and why it matters with a limited API call budget.
 $lockPath = sys_get_temp_dir() . '/vulndash_host_detection_sync.lock';
-$lockHandle = fopen($lockPath, 'c');
+$lockHandle = \VulnDash\Lib\LockFile::open($lockPath);
 if ($lockHandle === false) {
     fwrite(STDERR, "Could not open lock file {$lockPath} - check its ownership/permissions (this is a real error, not a normal overlapping-run skip).\n");
     exit(1);

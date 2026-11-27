@@ -75,7 +75,7 @@ foreach ($argv as $arg) {
 // Same non-blocking-lock pattern as the sync scripts: never let two runs call
 // Qualys's uninstall endpoint concurrently.
 $lockPath = sys_get_temp_dir() . '/vulndash_agent_uninstall.lock';
-$lockHandle = fopen($lockPath, 'c');
+$lockHandle = \VulnDash\Lib\LockFile::open($lockPath);
 if ($lockHandle === false) {
     fwrite(STDERR, "Could not open lock file {$lockPath} - check its ownership/permissions.\n");
     exit(1);

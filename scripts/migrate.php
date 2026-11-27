@@ -88,7 +88,7 @@ if (!preg_match('/^[A-Za-z0-9_]+$/', $dbName)) {
 
 // --- single-instance lock (same pattern as the other scripts) ---------------
 $lockPath   = sys_get_temp_dir() . '/vulndash_migrate.lock';
-$lockHandle = fopen($lockPath, 'c');
+$lockHandle = \VulnDash\Lib\LockFile::open($lockPath);
 if ($lockHandle === false) {
     fwrite(STDERR, "Could not open lock file {$lockPath} - check its ownership/permissions.\n");
     exit(1);

@@ -381,7 +381,7 @@ if ($rescanSince !== null && $rescanUntil !== null && $rescanUntil <= $rescanSin
 // --rescan-since too - a rescan and a normal cron run hitting the API at
 // the same time is exactly the kind of overlap this exists to prevent.
 $lockPath = sys_get_temp_dir() . '/vulndash_kb_sync.lock';
-$lockHandle = fopen($lockPath, 'c');
+$lockHandle = \VulnDash\Lib\LockFile::open($lockPath);
 if ($lockHandle === false) {
     // A real problem (e.g. the file exists but is owned by a different user
     // than whoever's running this - root vs www-data is the common case) -

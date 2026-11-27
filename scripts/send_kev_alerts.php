@@ -51,7 +51,7 @@ $reviewUrl = $baseUrl . '/vulnerabilities?kev=1';
 
 // --- single-instance lock (same pattern as send_notifications.php) ----------
 $lockPath   = sys_get_temp_dir() . '/vulndash_send_kev_alerts.lock';
-$lockHandle = fopen($lockPath, 'c');
+$lockHandle = \VulnDash\Lib\LockFile::open($lockPath);
 if ($lockHandle === false) {
     fwrite(STDERR, "Could not open lock file {$lockPath} - check its ownership/permissions.\n");
     exit(1);
