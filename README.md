@@ -492,6 +492,25 @@ action), needs `database/migrations/2026-11-add-audit-log.sql`, and prunes
 itself after `audit.retention_days` (default 365) - no cron job. Actions by
 CLI scripts and cron jobs aren't recorded.
 
+**Agent Setup.** Admin menu > Agent Setup (`/admin/agent_setup`) creates a
+client organisation's Qualys tag and activation key: a static, top-level tag
+(suggested as `<Organisation-Name>-Agents`, letters/numbers/hyphens only,
+editable) and an UNLIMITED key with the same title that applies it. The
+tag's local row gets the key's activation ID and is added to the
+organisation, so its members get the Install agent button. One tag and key
+per client: a same-named tag in Qualys (any case) stops the set-up for the
+admin to use it (static and unclaimed only) or pick another name; a
+same-titled key stops it too. Each Qualys id is saved as soon as it's
+returned, so Retry resumes without making a second tag or key. Calls Qualys
+during the request (about four calls, each on its own 25-per-24h counter,
+logged on API Usage) with the same API user as the syncs, which needs Create
+User Tag and Create Activation Key. Keys are licensed for
+`qualys.activation_key_modules` (default `['VM_LICENSE']`). Logic in
+`src/Lib/AgentProvisioner.php`; needs
+`database/migrations/2026-11-add-agent-provisioning.sql` (diagnostic:
+`scripts/diagnose_agent_provisioning_migration.php`, `--check-qualys` to
+confirm read access). No cron job.
+
 **History retention.** `scripts/prune_history.php` trims the history tables
 that nothing else prunes: `qualys_api_call_log`, `sync_log`, sent/failed rows
 in `scan_request_queue`, and the daily posture snapshots in

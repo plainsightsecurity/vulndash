@@ -81,7 +81,7 @@ $appName = Config::get('app.name') ?? 'Vulnerability Management Dashboard';
             '/guide'       => 'User guide',
         ];
         $adminLinks = !empty($_SESSION['is_admin'])
-            ? ['/admin/users' => 'Manage Users', '/admin/organisations' => 'Organisations', '/admin/audit_log' => 'Audit Log', '/admin/api_usage' => 'API Usage']
+            ? ['/admin/users' => 'Manage Users', '/admin/organisations' => 'Organisations', '/admin/agent_setup' => 'Agent Setup', '/admin/audit_log' => 'Audit Log', '/admin/api_usage' => 'API Usage']
             : (!empty($_SESSION['is_org_admin']) ? ['/org/users' => 'My organisation'] : []);
         $inAccountMenu = isset($accountLinks[$navPath]) || isset($adminLinks[$navPath]);
         ?>

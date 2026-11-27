@@ -39,6 +39,7 @@ $cases = [
     ['admin',  'password.php',           '',                  'html',  [], []],
     ['admin',  'admin/users.php',        '',                  'html',  ['client'], []],
     ['admin',  'admin/api_usage.php',    '',                  'html',  [], []],
+    ['admin',  'admin/agent_setup.php',  '',                  'html',  ['Agent Setup'], []],
     ['admin',  'guide.php',              '',                  'html',  ['id="admin-users"', 'id="admin-audit"', 'id="admin-api"', 'Custom remediation', 'Uninstalling the agent', 'href="/guide"'], []],
     ['client', 'dashboard.php',          '',                  'html',  [], OTHER_TENANTS],
     ['client', 'assets.php',             '',                  'html',  ['host-a', 'aria-current="page">Assets</a>'], array_merge(OTHER_TENANTS, ['href="/admin/users"', 'href="/admin/api_usage"'])],
@@ -60,6 +61,7 @@ $cases = [
     ['client', 'guide.php',              '',                  'html',  ['id="dashboard"', 'Scanning on demand', 'aria-current="page">User guide</a>'], array_merge(OTHER_TENANTS, ['id="admin-', 'href="#admin-', 'guide-admin-note', 'href="/admin/users"', '>Manage Users<', 'Uninstall', 'Install agent', 'Custom remediation', 'sync status'])],
     ['client', 'admin/users.php',        '',                  '403',   [], []],
     ['client', 'admin/api_usage.php',    '',                  '403',   [], []],
+    ['client', 'admin/agent_setup.php',  '',                  '403',   [], []],
 ];
 
 $pass = 0;

@@ -107,6 +107,10 @@ return [
         'ods_min_interval_minutes'   => 10,   // gap between send batches
         'ods_burst'                  => 6,    // sends allowed close together before pacing spreads the rest of the day's budget (0 = off)
         'ods_asset_cooldown_minutes' => 60,   // per-asset cooldown for non-admins
+
+        // --- Agent Setup (Admin > Agent Setup, src/Lib/AgentProvisioner.php) ----
+        // Licences new client activation keys are provisioned for. Default VM only.
+        // 'activation_key_modules'     => ['VM_LICENSE'],
     ],
 
     // Admin alert emails (src/Lib/ApiBudgetAlerts.php): Qualys API budget low,

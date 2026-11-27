@@ -52,6 +52,7 @@ $sections = [
     'org-admin'       => ['My organisation', !$isAdmin && !empty($_SESSION['is_org_admin']), false],
     'admin-users'     => ['Manage Users', $isAdmin, true],
     'admin-orgs'      => ['Organisations', $isAdmin, true],
+    'admin-agent-setup' => ['Agent Setup', $isAdmin, true],
     'admin-audit'     => ['Audit Log', $isAdmin, true],
     'admin-api'       => ['API Usage', $isAdmin, true],
 ];
@@ -494,6 +495,21 @@ require __DIR__ . '/../src/views/header.php';
     </ul>
     <p>Put people in an organisation from their <strong>Manage</strong> panel on Manage Users, where you can also make them its <strong>organisation admin</strong>. Organisation admins get a <em>My organisation</em> page where they can invite people (within the limit), deactivate and reactivate them, and send password links - nothing else: no tags, roles, emails or other organisations.</p>
     <p>To add many people at once, use <strong>Import from CSV</strong> on Manage Users. Columns: <code>username</code>, <code>email</code> (required), <code>organisation</code>, <code>tags</code> (separated by <code>;</code>) and <code>org_admin</code> (yes/no). Every row is checked first; if any has a problem, nothing is created and each problem is listed.</p>
+</section>
+<?php endif; ?>
+
+<?php if ($show['admin-agent-setup']): ?>
+<!-- ================================================================== -->
+<section class="guide-section" id="admin-agent-setup">
+    <h2>Agent Setup <span class="badge badge-accent guide-admin-badge">Admin</span></h2>
+    <p>Account menu &rarr; <strong>Agent Setup</strong>. Creates a client organisation's own Qualys tag and activation key in one go. Agents installed with the key get the tag automatically, and the organisation's members get the <em>Install agent</em> button on the Assets page with the key already filled in.</p>
+    <ul>
+        <li><strong>Tag name</strong> - suggested from the organisation's name with <code>-Agents</code> added, e.g. <code>Plainsight-Security-Agents</code>. You can change it before creating, but it can only use letters, numbers and hyphens - no spaces. The key gets the same name, so the two are easy to match up in Qualys.</li>
+        <li><strong>One per client</strong> - each organisation gets one tag and one key, and no two clients can share a tag name (whatever the capitals), tag or key.</li>
+        <li><strong>Name already in Qualys</strong> - nothing is created. You can use the existing tag for this client (only if it's a static tag no other client has), or <strong>Cancel</strong> and choose another name. A key with the same name stops the set-up the same way.</li>
+        <li><strong>Retry</strong> - if a set-up stops partway (a Qualys error or limit), Retry carries on from what was already created; it never makes a second tag or key. <strong>Cancel</strong> removes the set-up here, but anything already created in Qualys stays there for you to delete.</li>
+    </ul>
+    <p>Each set-up uses about four Qualys API calls, each on its own daily limit, and they show on API Usage.</p>
 </section>
 <?php endif; ?>
 

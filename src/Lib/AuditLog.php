@@ -66,6 +66,8 @@ class AuditLog
         'admin.tag_deleted'            => 'Deleted tag',
         'admin.ce_assessment_date'     => 'Set CE+ assessment date',
         'admin.tag_activation_id'      => 'Set agent activation ID',
+        'admin.agent_setup'            => 'Created client agent tag and activation key',
+        'admin.agent_setup_cancelled'  => 'Cancelled client agent set-up',
         'admin.remediation_set'        => 'Saved custom remediation',
         'admin.remediation_reverted'   => 'Reverted custom remediation',
         'finding.hidden'               => 'Hid a finding',

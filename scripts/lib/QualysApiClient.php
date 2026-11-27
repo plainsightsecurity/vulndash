@@ -169,7 +169,7 @@ namespace VulnDash\Scripts;
  *     is advisory only: if it can't be read or written, requests go ahead
  *     and the fail-fast check still applies.
  */
-class QualysApiClient
+class QualysApiClient implements \VulnDash\Lib\AgentProvisioningApi
 {
     /**
      * Qualys's own typical page size for Host List Detection pulls - the
@@ -1401,6 +1401,198 @@ class QualysApiClient
             }
         }
         return $out;
+    }
+
+    // ------------------------------------------------------------------
+    // Agent set-up (src/Lib/AgentProvisioner.php, Admin > Agent Setup)
+    // ------------------------------------------------------------------
+
+    /**
+     * Caps how long a 409 wait is slept through for this instance only - the
+     * Agent Setup page sets 0 so a web request fails at once with Qualys's
+     * reason instead of sleeping for minutes in front of an admin.
+     */
+    public function setMaxRateLimitWaitSec(int $seconds): void
+    {
+        $this->maxRateLimitWaitSec = max(0, $seconds);
+    }
+
+    /**
+     * Tags whose name CONTAINS $name (POST /qps/rest/2.0/search/am/tag). The
+     * AM & Tagging docs list CONTAINS for name but don't say whether it
+     * matches case-insensitively, so AgentProvisioner treats this as a
+     * superset and compares names itself. Up to 1000 partial matches are
+     * read; more than that throws rather than risk missing an exact match
+     * on a later page.
+     *
+     * @return array<int, array{name:string,ruleType:?string,ruleText:?string,srcAssetGroupId:?int,parentTagId:?int,other:array<string,string>}>
+     */
+    public function searchTagsByNameContains(string $name): array
+    {
+        $body = '<?xml version="1.0" encoding="UTF-8"?>'
+            . '<ServiceRequest>'
+            . '<preferences><limitResults>1000</limitResults></preferences>'
+            . '<filters><Criteria field="name" operator="CONTAINS">' . htmlspecialchars($name, ENT_XML1) . '</Criteria></filters>'
+            . '</ServiceRequest>';
+        $tmp = $this->postQpsToFile('/qps/rest/2.0/search/am/tag', $body);
+        try {
+            $tags = $this->parseTagSearch($tmp);
+            if ($this->qpsHasMoreRecords($tmp)) {
+                throw new \RuntimeException("Qualys has more than 1000 tags with names containing '{$name}' - too many to check for a duplicate safely.");
+            }
+            return $tags;
+        } finally {
+            @unlink($tmp);
+        }
+    }
+
+    /**
+     * Creates a static top-level tag (POST /qps/rest/2.0/create/am/tag): no
+     * ruleType, so Qualys applies it only where something else puts it - here,
+     * the activation key, to every agent installed with that key. Static on
+     * purpose: Qualys won't attach a tag with dynamic rules to a key.
+     */
+    public function createStaticTag(string $name): int
+    {
+        $body = '<?xml version="1.0" encoding="UTF-8"?>'
+            . '<ServiceRequest><data><Tag><name>' . htmlspecialchars($name, ENT_XML1) . '</name></Tag></data></ServiceRequest>';
+        $tmp = $this->postQpsToFile('/qps/rest/2.0/create/am/tag', $body);
+        try {
+            $xml = $this->qpsSuccessXml($tmp, 'Create Tag');
+            $id = isset($xml->data->Tag->id) ? (int)$xml->data->Tag->id : 0;
+            if ($id <= 0) {
+                throw new \RuntimeException('Qualys Create Tag returned SUCCESS but no tag id.');
+            }
+            return $id;
+        } finally {
+            @unlink($tmp);
+        }
+    }
+
+    /**
+     * Every activation key (POST /qps/rest/1.0/search/ca/agentactkey/), paged
+     * 1000 at a time. Read in full because title isn't a filter field on this
+     * search, and the duplicate-title check has to see every key.
+     *
+     * @return array<int, array{id: int, title: string, activation_key: string, tag_ids: int[]}>
+     */
+    public function listActivationKeys(): array
+    {
+        $out = [];
+        $offset = 1;
+        for ($page = 0; $page < 50; $page++) {
+            $body = '<?xml version="1.0" encoding="UTF-8"?>'
+                . '<ServiceRequest><preferences>'
+                . '<startFromOffset>' . $offset . '</startFromOffset><limitResults>1000</limitResults>'
+                . '</preferences></ServiceRequest>';
+            $tmp = $this->postQpsToFile('/qps/rest/1.0/search/ca/agentactkey/', $body);
+            try {
+                $xml = $this->qpsSuccessXml($tmp, 'Search Activation Keys');
+                $keys = $this->parseActivationKeys($xml);
+                $out += $keys;
+                if (!$this->qpsHasMoreRecords($tmp) || $keys === []) {
+                    return $out;
+                }
+                $offset += count($keys);
+            } finally {
+                @unlink($tmp);
+            }
+        }
+        throw new \RuntimeException('Qualys kept reporting more activation keys after 50 pages - stopped rather than loop.');
+    }
+
+    /**
+     * Creates an UNLIMITED activation key that applies one tag
+     * (POST /qps/rest/1.0/create/ca/agentactkey/), using the legacy XML
+     * endpoint because it takes the same basic auth as every other call here;
+     * the newer /caui/ endpoint needs a JWT.
+     *
+     * @param string[] $modules licence names from Qualys's documented list (VM_LICENSE, PC_LICENSE, ...)
+     * @return array{id: int, title: string, activation_key: string, tag_ids: int[]}
+     */
+    public function createActivationKey(string $title, int $tagId, string $tagName, array $modules): array
+    {
+        $moduleXml = '';
+        foreach ($modules as $module) {
+            $moduleXml .= '<ActivationKeyModule><license>' . htmlspecialchars((string)$module, ENT_XML1) . '</license></ActivationKeyModule>';
+        }
+        $body = '<?xml version="1.0" encoding="UTF-8"?>'
+            . '<ServiceRequest><data><AgentActKey>'
+            . '<title>' . htmlspecialchars($title, ENT_XML1) . '</title>'
+            . '<type>UNLIMITED</type>'
+            . ($moduleXml !== '' ? '<modules><list>' . $moduleXml . '</list></modules>' : '')
+            . '<tags><list><Tag><id>' . $tagId . '</id><name>' . htmlspecialchars($tagName, ENT_XML1) . '</name></Tag></list></tags>'
+            . '</AgentActKey></data></ServiceRequest>';
+        $tmp = $this->postQpsToFile('/qps/rest/1.0/create/ca/agentactkey/', $body);
+        try {
+            $keys = $this->parseActivationKeys($this->qpsSuccessXml($tmp, 'Create Activation Key'));
+            if (count($keys) !== 1) {
+                throw new \RuntimeException('Qualys Create Activation Key returned SUCCESS but ' . count($keys) . ' usable keys (expected 1).');
+            }
+            return reset($keys);
+        } finally {
+            @unlink($tmp);
+        }
+    }
+
+    /** @return array{id: int, title: string, activation_key: string, tag_ids: int[]}|null */
+    public function getActivationKey(int $keyId): ?array
+    {
+        $body = '<?xml version="1.0" encoding="UTF-8"?>'
+            . '<ServiceRequest><filters><Criteria field="id" operator="EQUALS">' . $keyId . '</Criteria></filters></ServiceRequest>';
+        $tmp = $this->postQpsToFile('/qps/rest/1.0/search/ca/agentactkey/', $body);
+        try {
+            return $this->parseActivationKeys($this->qpsSuccessXml($tmp, 'Search Activation Keys'))[$keyId] ?? null;
+        } finally {
+            @unlink($tmp);
+        }
+    }
+
+    /**
+     * <AgentActKey> elements as id => key. A key without an id or a UUID
+     * activationKey is skipped: nothing could be installed with it. Tags are
+     * read from both <Tag> and <TagSimple>, since Qualys's samples use each.
+     *
+     * @return array<int, array{id: int, title: string, activation_key: string, tag_ids: int[]}>
+     */
+    private function parseActivationKeys(\SimpleXMLElement $xml): array
+    {
+        $out = [];
+        foreach ($xml->data->AgentActKey ?? [] as $key) {
+            $id = isset($key->id) ? (int)$key->id : 0;
+            $uuid = strtolower(trim((string)($key->activationKey ?? '')));
+            if ($id <= 0 || preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/', $uuid) !== 1) {
+                continue;
+            }
+            $tagIds = [];
+            foreach (['Tag', 'TagSimple'] as $el) {
+                foreach ($key->tags->list->{$el} ?? [] as $tag) {
+                    if (isset($tag->id) && (int)$tag->id > 0) {
+                        $tagIds[] = (int)$tag->id;
+                    }
+                }
+            }
+            $out[$id] = [
+                'id'             => $id,
+                'title'          => trim((string)($key->title ?? '')),
+                'activation_key' => $uuid,
+                'tag_ids'        => array_values(array_unique($tagIds)),
+            ];
+        }
+        return $out;
+    }
+
+    /** Parsed QPS response, or throws unless it says SUCCESS - see assertQpsSuccess(). */
+    private function qpsSuccessXml(string $path, string $what): \SimpleXMLElement
+    {
+        $this->assertQpsSuccess($path, $what);
+        return \simplexml_load_file($path);
+    }
+
+    private function qpsHasMoreRecords(string $path): bool
+    {
+        $xml = @\simplexml_load_file($path);
+        return $xml !== false && strtolower(trim((string)($xml->hasMoreRecords ?? ''))) === 'true';
     }
 
     /**
