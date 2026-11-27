@@ -758,5 +758,3 @@ failure only if every attempted feed failed.
 - Require two-factor for admin and organisation admin accounts (it is
   available to everyone, but optional).
 - Reject common or breached passwords (currently: 12 characters minimum).
-- After an on-demand scan, pull just the scanned hosts' detections, so
-  results arrive sooner once the host sync has slowed to fit the API budget.
