@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 /**
  * Read-only pre-migration diagnostic for
- * database/migrations/2026-11-add-agent-provisioning.sql (Admin > Agent Setup).
+ * database/migrations/2026-11-add-agent-provisioning.sql and
+ * 2026-11-agent-provisioning-origin-cascade.sql (Admin > Agent Setup). For a
+ * table made by the first version of the former, it says the latter is
+ * needed and lists any set-up with no organisation, which would block it.
  *
  * The migration only adds a table, so it can't damage anything; Agent Setup
  * errors until it has run. This says whether it has, and previews the page
@@ -44,6 +47,22 @@ $applied = (int)$pdo->query("
 ")->fetchColumn() === 1;
 fwrite(STDOUT, 'agent_provisioning: ' . ($applied ? 'PRESENT (migration already applied)' : 'absent (migration not yet applied - /admin/agent_setup will error until it is)') . "\n");
 if ($applied) {
+    // A table made by the first version of the migration needs
+    // 2026-11-agent-provisioning-origin-cascade.sql as well.
+    $hasOrigin = (int)$pdo->query("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'agent_provisioning' AND COLUMN_NAME = 'origin'")->fetchColumn() === 1;
+    $cascade = (string)$pdo->query("SELECT DELETE_RULE FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'agent_provisioning' AND CONSTRAINT_NAME = 'fk_agent_prov_org'")->fetchColumn() === 'CASCADE';
+    if (!$hasOrigin || !$cascade) {
+        fwrite(STDOUT, "  first-version table: run database/migrations/2026-11-agent-provisioning-origin-cascade.sql too\n");
+        $orphans = $pdo->query('SELECT tag_name FROM agent_provisioning WHERE organisation_id IS NULL ORDER BY tag_name')->fetchAll(\PDO::FETCH_COLUMN);
+        if ($orphans !== []) {
+            fwrite(STDOUT, '  PROBLEM: set-ups with no organisation block that migration: ' . implode(', ', $orphans) . "\n");
+            $exitCode = 1;
+        }
+    } else {
+        fwrite(STDOUT, "  table is up to date\n");
+    }
     fwrite(STDOUT, '  set-ups: ' . (int)$pdo->query("SELECT COUNT(*) FROM agent_provisioning WHERE status = 'complete'")->fetchColumn() . ' complete, '
         . (int)$pdo->query("SELECT COUNT(*) FROM agent_provisioning WHERE status = 'in_progress'")->fetchColumn() . " unfinished\n");
 }
