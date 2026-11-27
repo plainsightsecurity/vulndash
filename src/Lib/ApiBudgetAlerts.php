@@ -114,8 +114,12 @@ final class ApiBudgetAlerts
         return $lines;
     }
 
-    /** @return array<string, string> email => name */
-    private static function recipients(): array
+    /**
+     * Who admin alerts go to - also used by SyncHealthAlerts.
+     *
+     * @return array<string, string> email => name
+     */
+    public static function recipients(): array
     {
         $configured = Config::get('alerts.admin_emails');
         if (is_string($configured) && $configured !== '') {

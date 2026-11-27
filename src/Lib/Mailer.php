@@ -164,22 +164,30 @@ final class Mailer
      *
      * @param string[] $lines
      */
-    public static function sendAdminAlertEmail(string $toEmail, string $toName, string $topic, array $lines, string $url): bool
-    {
+    public static function sendAdminAlertEmail(
+        string $toEmail,
+        string $toName,
+        string $topic,
+        array $lines,
+        string $url,
+        string $buttonLabel = 'Open API Usage',
+        ?string $intro = null,
+        string $footer = "You get this because you are an admin. The same alert isn't repeated for 24 hours."
+    ): bool {
         $appName = (string)(Config::get('app.name') ?? 'VulnDash');
         $subject = "{$appName} admin alert: {$topic}";
         $greeting = $toName !== '' ? 'Hi ' . self::h($toName) . ',' : 'Hi,';
+        $intro ??= "{$appName} needs your attention:";
 
         $html = self::wrapHtml(
             '<p>' . $greeting . '</p>'
-            . '<p>' . self::h($appName) . ' needs your attention:</p>'
+            . '<p>' . self::h($intro) . '</p>'
             . '<ul>' . implode('', array_map(static fn (string $l): string => '<li style="margin-bottom:0.5em;">' . self::h($l) . '</li>', $lines)) . '</ul>'
-            . self::button($url, 'Open API Usage')
-            . '<p style="color:#5B6472;font-size:13px;">You get this because you are an admin. The same alert '
-            . "isn't repeated for 24 hours.</p>"
+            . self::button($url, $buttonLabel)
+            . '<p style="color:#5B6472;font-size:13px;">' . self::h($footer) . '</p>'
         );
         $text = ($toName !== '' ? "Hi {$toName},\n\n" : "Hi,\n\n")
-            . "{$appName} needs your attention:\n\n"
+            . "{$intro}\n\n"
             . implode("\n", array_map(static fn (string $l): string => "- {$l}", $lines))
             . "\n\n{$url}\n";
 

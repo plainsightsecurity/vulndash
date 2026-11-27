@@ -115,10 +115,16 @@ return [
 
     // Admin alert emails (src/Lib/ApiBudgetAlerts.php): Qualys API budget low,
     // forecast over the limit, or the host sync's auto interval changing.
+    // And (src/Lib/SyncHealthAlerts.php, scripts/send_sync_alerts.php) a KB or
+    // host sync failing, stuck or overdue - judged as the dashboard's sync
+    // status panel does, so set sync.*_expected_interval_minutes below right.
     'alerts' => [
         // 'admin_emails'           => ['mark@plainsightsecurity.co.uk'], // default: every active admin
         'api_budget_low_threshold'  => 5,   // default 5 calls left on an endpoint + version
         'ods_busy_calls'            => 18,  // email when on-demand scan calls in 24h reach this (0 = off)
+        // 'sync_health'               => false, // default on
+        'sync_failed_grace_minutes' => 60,  // default 60 - a failure must last this long before it emails
+        'sync_reminder_hours'       => 24,  // default 24 - repeat while unresolved (0 = never)
     ],
 
     'sync' => [

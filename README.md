@@ -503,6 +503,29 @@ there is no backlog email. Needs
 
 `--dry-run` shows who would be emailed without sending or recording anything.
 
+**Sync failure emails.** `scripts/send_sync_alerts.php` emails admins
+(`alerts.admin_emails`, else every active admin) when the Knowledge Base or
+host detection sync has **failed**, is **stuck** (a run still "running" after
+twice its expected interval) or is **overdue** (no success for twice its
+expected interval - also what a stopped cron job looks like), or has missing
+KB QIDs that need a person. It judges health exactly as the dashboard's sync
+status panel does, so the expected intervals under `sync` in
+`src/config/config.php` decide when "overdue" starts. A failure only emails
+once it has lasted `alerts.sync_failed_grace_minutes` (default 60), so a
+one-off Qualys error the next run recovers from stays quiet. Each problem is
+emailed once, again if it changes (failed -> stuck), as a reminder every
+`alerts.sync_reminder_hours` (default 24) while it lasts, and once more when
+it's fixed. An email nobody received is retried next run. Logic in
+`src/Lib/SyncHealthAlerts.php`; `alerts.sync_health => false` turns it off.
+Makes no Qualys API calls. It runs from cron too, so it can't report cron
+itself stopping altogether.
+
+```cron
+5,20,35,50 * * * * php /var/www/dashboard.plainsightsecurity.co.uk/scripts/send_sync_alerts.php >> /var/log/vulndash/sync_alerts.log 2>&1
+```
+
+`--dry-run` shows what would be emailed without sending or saving anything.
+
 **Audit log.** Admin menu > Audit Log (`/admin/audit_log`) lists who did
 what: sign-ins (and failures, lockouts, rejected two-factor codes), account
 security changes, every admin action on users and tags, hidden findings,
