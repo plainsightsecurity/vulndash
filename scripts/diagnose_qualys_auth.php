@@ -70,7 +70,7 @@ $ch = curl_init($url);
 curl_setopt_array($ch, [
     CURLOPT_HTTPAUTH       => CURLAUTH_BASIC,
     CURLOPT_USERPWD        => $username . ':' . $password,
-    CURLOPT_HTTPHEADER     => ['X-Requested-With: Plainsight VulnDash diagnostic'],
+    CURLOPT_HTTPHEADER     => ['X-Requested-With: Plainsight Security VulnDash diagnostic'],
     CURLOPT_RETURNTRANSFER => true,
     CURLOPT_CONNECTTIMEOUT => 30,
     CURLOPT_TIMEOUT        => 30,

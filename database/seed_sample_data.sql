@@ -30,7 +30,7 @@ INSERT INTO users (id, username, email, password_hash, is_admin, is_active) VALU
 INSERT INTO tags (id, qualys_tag_id, name) VALUES
     (1, '1001', 'Acme Corp - Production'),
     (2, '2002', 'Beacon Retail - Stores'),
-    (3, '3003', 'Plainsight - Internal');
+    (3, '3003', 'Plainsight Security - Internal');
 
 INSERT INTO user_tags (user_id, tag_id) VALUES
     (2, 1); -- acme_client can only ever see assets tagged "Acme Corp - Production"
@@ -69,7 +69,7 @@ INSERT INTO assets (id, qualys_host_id, hostname, ip_address, os, tracking_metho
 INSERT INTO asset_tags (asset_id, tag_id) VALUES
     (1, 1), (2, 1),   -- Acme Corp - Production
     (3, 2), (4, 2),   -- Beacon Retail - Stores
-    (5, 3);           -- Plainsight - Internal
+    (5, 3);           -- Plainsight Security - Internal
 
 -- ---------------------------------------------------------------------------
 -- Host detections

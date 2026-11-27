@@ -571,7 +571,7 @@ class Auth
     /**
      * For /org/* pages: signed in, a member of an active organisation and its
      * organisation admin, as of THIS request (check() re-reads all of that).
-     * Plainsight admins aren't in an organisation and use /admin pages.
+     * Plainsight Security admins aren't in an organisation and use /admin pages.
      *
      * @return int the organisation id every action on the page is confined to
      */

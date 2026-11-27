@@ -11,7 +11,7 @@ namespace VulnDash\Scripts;
  *
  *   - fetchKnowledgeBaseChunk()'s field mapping and fetchHostDetections()'s
  *     host/detection field parsing are both now confirmed against real
- *     responses from Plainsight's own qg3 (US Platform 3) subscription
+ *     responses from Plainsight Security's own qg3 (US Platform 3) subscription
  *     (July 2026) - including a host with real tags and detections (agent
  *     "bernard"). One correction made from that real response: per-host
  *     tags are wrapped in <TAGS>, not <TAG_LIST> as first assumed from
@@ -1026,7 +1026,7 @@ class QualysApiClient implements \VulnDash\Lib\AgentProvisioningApi
             curl_setopt_array($ch, [
                 CURLOPT_HTTPAUTH       => CURLAUTH_BASIC,
                 CURLOPT_USERPWD        => $this->username . ':' . $this->password,
-                CURLOPT_HTTPHEADER     => ['X-Requested-With: Plainsight VulnDash'],
+                CURLOPT_HTTPHEADER     => ['X-Requested-With: Plainsight Security VulnDash'],
                 CURLOPT_FILE           => $fh,
                 CURLOPT_CONNECTTIMEOUT => 30,
                 CURLOPT_TIMEOUT        => 0, // KnowledgeBase pulls can legitimately take minutes
@@ -1146,7 +1146,7 @@ class QualysApiClient implements \VulnDash\Lib\AgentProvisioningApi
                 CURLOPT_HTTPAUTH       => CURLAUTH_BASIC,
                 CURLOPT_USERPWD        => $this->username . ':' . $this->password,
                 CURLOPT_HTTPHEADER     => [
-                    'X-Requested-With: Plainsight VulnDash',
+                    'X-Requested-With: Plainsight Security VulnDash',
                     'Content-Type: text/xml',
                 ],
                 CURLOPT_FILE           => $fh,

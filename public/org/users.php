@@ -20,7 +20,7 @@ use VulnDash\Lib\UserRepository;
  *     with no extra tags, no admin or organisation-admin rights and no
  *     uninstall grant, and is emailed a setup link
  *   - deactivate / reactivate members (not themselves, not other
- *     organisation admins - only a Plainsight admin can change those)
+ *     organisation admins - only a Plainsight Security admin can change those)
  *   - send a member a fresh password link, to the address already on file
  *
  * Nothing here can change tags, emails, roles or another organisation. Every
@@ -42,7 +42,7 @@ function orgMember(int $userId, int $orgId, int $myId): array
         throw new \RuntimeException("You can't change your own account here.");
     }
     if ((int)$user['is_org_admin'] === 1) {
-        throw new \RuntimeException('Organisation admins can only be changed by Plainsight.');
+        throw new \RuntimeException('Organisation admins can only be changed by Plainsight Security.');
     }
     return $user;
 }
@@ -74,7 +74,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     throw new \RuntimeException($error);
                 }
                 if (!OrganisationRepository::hasRoom($orgId)) {
-                    throw new \RuntimeException("Your organisation has reached its limit of {$org['max_users']} active users. Deactivate someone first, or ask Plainsight to raise the limit.");
+                    throw new \RuntimeException("Your organisation has reached its limit of {$org['max_users']} active users. Deactivate someone first, or ask Plainsight Security to raise the limit.");
                 }
                 $userId = UserRepository::createUser($username, $email, false, [], false, $orgId, false);
                 AuditLog::record('org.user_invited', $target($userId, $username) + ['details' => ['email' => $email, 'organisation' => $org['name']]]);
@@ -82,7 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($sent) {
                     Helpers::setFlash("Invited {$username} - they've been emailed a link to set their password.");
                 } else {
-                    Helpers::setFlash("Created {$username}, but the invitation email couldn't be sent. Try \"Send password link\" shortly, or contact Plainsight.", 'error');
+                    Helpers::setFlash("Created {$username}, but the invitation email couldn't be sent. Try \"Send password link\" shortly, or contact Plainsight Security.", 'error');
                 }
                 break;
 
@@ -134,7 +134,7 @@ require __DIR__ . '/../../src/views/header.php';
     <h1><?= Helpers::e($org['name']) ?></h1>
     <p class="page-subtitle">
         <?= $org['active_users'] ?> active user<?= $org['active_users'] === 1 ? '' : 's' ?><?= $org['max_users'] !== null ? ' of ' . $org['max_users'] . ' allowed' : '' ?>.
-        Everyone here sees the same systems; Plainsight manages which those are.
+        Everyone here sees the same systems; Plainsight Security manages which those are.
     </p>
 </div>
 
@@ -145,7 +145,7 @@ require __DIR__ . '/../../src/views/header.php';
 <div class="panel">
     <h2>Invite someone</h2>
     <?php if ($full): ?>
-    <p class="no-tags">You've reached your limit of <?= (int)$org['max_users'] ?> active users. Deactivate someone below to make room, or ask Plainsight to raise the limit.</p>
+    <p class="no-tags">You've reached your limit of <?= (int)$org['max_users'] ?> active users. Deactivate someone below to make room, or ask Plainsight Security to raise the limit.</p>
     <?php else: ?>
     <form method="post" class="inline-form-row" style="align-items: flex-end;">
         <input type="hidden" name="action" value="invite">

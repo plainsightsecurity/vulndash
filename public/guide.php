@@ -481,7 +481,7 @@ require __DIR__ . '/../src/views/header.php';
         <li><strong>Deactivate</strong> someone who has left - they're signed out straight away and can't sign in. <strong>Reactivate</strong> brings them back.</li>
         <li><strong>Send password link</strong> - for someone who lost their invitation or forgot their password. It goes to the email address already on their account.</li>
     </ul>
-    <p>Your organisation has a limit on how many active users it can have, shown at the top of the page. Deactivated people don't count towards it. To raise the limit, change which systems your organisation sees, or change another organisation admin's account, contact Plainsight.</p>
+    <p>Your organisation has a limit on how many active users it can have, shown at the top of the page. Deactivated people don't count towards it. To raise the limit, change which systems your organisation sees, or change another organisation admin's account, contact Plainsight Security.</p>
 </section>
 <?php endif; ?>
 

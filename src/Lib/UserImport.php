@@ -19,7 +19,7 @@ namespace VulnDash\Lib;
  * in the file, an account that would see no data) and if any row has a
  * problem nothing is created. Imported accounts are clients - never admins,
  * no uninstall grant. Organisation user limits are reported, not enforced:
- * they bind organisation admins, and the person importing is a Plainsight
+ * they bind organisation admins, and the person importing is a Plainsight Security
  * admin, who can already go past them.
  */
 final class UserImport

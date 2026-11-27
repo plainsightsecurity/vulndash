@@ -11,7 +11,7 @@ namespace VulnDash\Lib;
  * (UserRepository::EFFECTIVE_TAGS_SQL), so changing an organisation's tags
  * changes every member's access on their next request. Suspending it signs
  * every member out and stops them signing in. max_users caps how many ACTIVE
- * accounts its organisation admins can have (Plainsight admins can go past it).
+ * accounts its organisation admins can have (Plainsight Security admins can go past it).
  */
 final class OrganisationRepository
 {

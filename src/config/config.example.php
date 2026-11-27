@@ -166,7 +166,7 @@ return [
     'exploit_intel' => [
         'kev_url'          => 'https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json',
         'epss_url'         => 'https://epss.empiricalsecurity.com/epss_scores-current.csv.gz',
-        'user_agent'       => 'Plainsight VulnDash exploit-intel sync',
+        'user_agent'       => 'Plainsight Security VulnDash exploit-intel sync',
         'http_timeout_sec' => 120,
     ],
 

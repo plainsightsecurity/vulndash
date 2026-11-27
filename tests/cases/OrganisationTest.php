@@ -150,7 +150,7 @@ test('Manage Users: create an account into an organisation with no extra tags', 
 test('only organisation admins reach /org/users', function () {
     seed_org();
     ok(str_contains(render_page('org/users.php', '', 'client'), 'Wavehill'), 'org admin');
-    ok(str_contains(render_page('org/users.php', '', 'admin'), '403 Forbidden'), 'Plainsight admin uses /admin');
+    ok(str_contains(render_page('org/users.php', '', 'admin'), '403 Forbidden'), 'Plainsight Security admin uses /admin');
     Database::getConnection()->exec('UPDATE users SET is_org_admin = 0 WHERE id = 2');
     ok(str_contains(render_page('org/users.php', '', 'client'), '403 Forbidden'), 'plain member');
 });
@@ -224,7 +224,7 @@ test('CSV import: any bad row means nothing is created, with every problem liste
 });
 
 test('CSV import through Manage Users creates accounts and emails them, or not', function () {
-    $org = seed_org(2); // already full: a warning, not a block, for Plainsight admins
+    $org = seed_org(2); // already full: a warning, not a block, for Plainsight Security admins
     $csv = tempnam(sys_get_temp_dir(), 'vdcsv');
     file_put_contents($csv, "username,email,organisation\nn1,n1@example.com,Wavehill\nn2,n2@example.com,Wavehill\n");
     $parsed = UserImport::parse((string)file_get_contents($csv));

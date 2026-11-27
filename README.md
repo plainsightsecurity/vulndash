@@ -311,7 +311,7 @@ If you loaded `seed_sample_data.sql`, two accounts exist, both with password
 - `admin` - `is_admin = 1`, sees every asset/vulnerability
 - `acme_client` - scoped to the "Acme Corp - Production" tag only, so you can
   see the tag-scoping working (it won't see the "Beacon Retail" or
-  "Plainsight - Internal" sample assets)
+  "Plainsight Security - Internal" sample assets)
 
 Delete these (and the sample tags/assets/detections) once you've had a look,
 or before this is reachable from anywhere untrusted:
@@ -719,7 +719,7 @@ works with no config change at all. Add an `exploit_intel` block to
         // Defaults shown; override to point at a mirror if a feed host blocks you.
         'kev_url'  => 'https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json',
         'epss_url' => 'https://epss.empiricalsecurity.com/epss_scores-current.csv.gz',
-        'user_agent' => 'Plainsight VulnDash exploit-intel sync',
+        'user_agent' => 'Plainsight Security VulnDash exploit-intel sync',
         'http_timeout_sec' => 120,
     ],
 ```

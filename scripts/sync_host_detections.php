@@ -18,7 +18,7 @@ declare(strict_types=1);
  * correctly reflected here too - not just tags being added. That matters
  * for the tag-scoping model specifically: a stale asset_tags row would be
  * a real access-control bug (a client dashboard keeps seeing an asset
- * after Plainsight has untagged it from that client's scope), not just
+ * after Plainsight Security has untagged it from that client's scope), not just
  * stale display data, so this errs on re-deriving the full set each time
  * rather than only ever adding.
  *

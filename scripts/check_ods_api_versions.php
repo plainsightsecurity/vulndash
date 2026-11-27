@@ -78,7 +78,7 @@ foreach ($versions as $version) {
         CURLOPT_POSTFIELDS     => $body,
         CURLOPT_HTTPAUTH       => CURLAUTH_BASIC,
         CURLOPT_USERPWD        => $username . ':' . $password,
-        CURLOPT_HTTPHEADER     => ['X-Requested-With: Plainsight VulnDash', 'Content-Type: text/xml'],
+        CURLOPT_HTTPHEADER     => ['X-Requested-With: Plainsight Security VulnDash', 'Content-Type: text/xml'],
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_CONNECTTIMEOUT => 30,
         CURLOPT_TIMEOUT        => 120,
