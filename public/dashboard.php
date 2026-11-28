@@ -316,7 +316,34 @@ $postureTagSuffix = $viewTagId !== null ? ' in this tag' : '';
 
 <?php if (!empty($syncStatuses)): ?>
 <div class="sync-status-grid">
+    <?php
+    // Disk space (src/Lib/ServerHealth.php): shown here too, not only by
+    // email, so a full disk is visible even if email delivery is the thing
+    // that's broken. The fullest disk the app depends on. Buffered so it can
+    // sit after the sync cards and before the backup cards - in the 4-column
+    // grid that puts it top right with both backup cards on the second row.
+    ob_start();
+    $fullestDisk = ServerHealth::filesystems()[0] ?? null;
+    if ($fullestDisk !== null):
+        $diskLow = $fullestDisk['used_pct'] >= ServerHealth::warnPercent();
+    ?>
+    <div class="sync-status-card sync-status-<?= $diskLow ? 'failed' : 'healthy' ?>">
+        <div class="sync-status-header">
+            <span class="sync-status-dot"></span>
+            <span class="sync-status-label">Disk space</span>
+        </div>
+        <div class="sync-status-detail">
+            <?= Helpers::e(number_format($fullestDisk['used_pct'], 1)) ?>% full on <span class="mono"><?= Helpers::e($fullestDisk['mount']) ?></span> - <?= Helpers::e(ServerHealth::bytes($fullestDisk['free'])) ?> free<?= $diskLow ? '. Free some space before MySQL, logs and backups stop.' : '.' ?>
+        </div>
+        <div class="sync-status-timestamp"><a href="/admin/api_usage#server">Details</a></div>
+    </div>
+    <?php endif; ?>
+    <?php
+    $diskCardHtml = (string)ob_get_clean();
+    $diskCardShown = false;
+    ?>
     <?php foreach ($syncStatuses as $sync): ?>
+    <?php if (!empty($sync['is_backup']) && !$diskCardShown): $diskCardShown = true; ?><?= $diskCardHtml ?><?php endif; ?>
     <div class="sync-status-card sync-status-<?= Helpers::e($sync['state']) ?>">
         <div class="sync-status-header">
             <span class="sync-status-dot"></span>
@@ -390,25 +417,7 @@ $postureTagSuffix = $viewTagId !== null ? ' in this tag' : '';
         <?php endif; ?>
     </div>
     <?php endforeach; ?>
-    <?php
-    // Disk space (src/Lib/ServerHealth.php): shown here too, not only by
-    // email, so a full disk is visible even if email delivery is the thing
-    // that's broken. The fullest disk the app depends on.
-    $fullestDisk = ServerHealth::filesystems()[0] ?? null;
-    if ($fullestDisk !== null):
-        $diskLow = $fullestDisk['used_pct'] >= ServerHealth::warnPercent();
-    ?>
-    <div class="sync-status-card sync-status-<?= $diskLow ? 'failed' : 'healthy' ?>">
-        <div class="sync-status-header">
-            <span class="sync-status-dot"></span>
-            <span class="sync-status-label">Disk space</span>
-        </div>
-        <div class="sync-status-detail">
-            <?= Helpers::e(number_format($fullestDisk['used_pct'], 1)) ?>% full on <span class="mono"><?= Helpers::e($fullestDisk['mount']) ?></span> - <?= Helpers::e(ServerHealth::bytes($fullestDisk['free'])) ?> free<?= $diskLow ? '. Free some space before MySQL, logs and backups stop.' : '.' ?>
-        </div>
-        <div class="sync-status-timestamp"><a href="/admin/api_usage#server">Details</a></div>
-    </div>
-    <?php endif; ?>
+    <?php if (!$diskCardShown): ?><?= $diskCardHtml ?><?php endif; ?>
 </div>
 <?php endif; ?>
 
