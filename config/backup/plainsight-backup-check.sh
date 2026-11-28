@@ -163,10 +163,20 @@ section="$WORK/section.sql"
 # restricted user create them while binary logging is on, and giving the
 # temporary user that power would undo the point of it. The counts are
 # compared with live below, so none can go missing unnoticed.
+#
+# The dump's closing lines restore settings saved at the very top of the file
+# (SET TIME_ZONE=@OLD_TIME_ZONE and so on). When vulndash is the last
+# database in the dump - as on the live server - those follow its section,
+# and without the top of the file they'd set NULL and fail. So the section
+# stops at "-- Dump completed", and any line restoring an @OLD_ setting is
+# dropped. LC_ALL=C: the dump is bytes, not text in this locale.
 gzip -dc "$dump" \
-  | awk -v want="-- Current Database: \`$LIVE_DB\`" 'index($0, "-- Current Database: `") == 1 { keep = ($0 == want) } keep' \
-  | sed -E '/^CREATE DATABASE /d; /^USE `/d; s/DEFINER=`[^`]*`@`[^`]*`//g' \
-  | awk -v counts="$WORK/objects.txt" '
+  | LC_ALL=C awk -v want="-- Current Database: \`$LIVE_DB\`" '
+      index($0, "-- Current Database: `") == 1 { keep = ($0 == want) }
+      index($0, "-- Dump completed") == 1 { keep = 0 }
+      keep' \
+  | LC_ALL=C sed -E '/^CREATE DATABASE /d; /^USE `/d; /@OLD_[A-Z_]+/d; s/DEFINER=`[^`]*`@`[^`]*`//g' \
+  | LC_ALL=C awk -v counts="$WORK/objects.txt" '
       /^DELIMITER ;;$/ { inblock = 1; next }
       inblock && /^DELIMITER ;$/ { inblock = 0; next }
       inblock {
@@ -184,10 +194,10 @@ grep -q '^CREATE TABLE ' "$section" || fail "The \`$LIVE_DB\` section of the dum
 
 # Refuse anything that could reach beyond the scratch database.
 # (A plain grep -q on the file: piping into head/grep would let pipefail mask a match.)
-if grep -q -i -E '^[[:space:]]*(USE[[:space:]]|CREATE[[:space:]]+DATABASE|DROP[[:space:]]+DATABASE|CREATE[[:space:]]+USER|ALTER[[:space:]]+USER|DROP[[:space:]]+USER|GRANT[[:space:]]|REVOKE[[:space:]])' "$section"; then
+if LC_ALL=C grep -q -i -E '^[[:space:]]*(USE[[:space:]]|CREATE[[:space:]]+DATABASE|DROP[[:space:]]+DATABASE|CREATE[[:space:]]+USER|ALTER[[:space:]]+USER|DROP[[:space:]]+USER|GRANT[[:space:]]|REVOKE[[:space:]])' "$section"; then
   fail "Refusing to load: the extracted section still has database/user statements - check the dump format"
 fi
-if grep -q "\`$LIVE_DB\`\\." "$section"; then
+if LC_ALL=C grep -q "\`$LIVE_DB\`\\." "$section"; then
   fail "Refusing to load: the extracted section names the live database (\`$LIVE_DB\`.) directly"
 fi
 
