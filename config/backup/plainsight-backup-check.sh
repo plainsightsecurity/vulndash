@@ -75,6 +75,44 @@ trap 'on_signal TERM' TERM
 trap 'on_signal INT' INT
 trap 'on_signal HUP' HUP
 
+# ─── Reach the backup server first ───────────────────────────────────────────
+# The backup server is a Raspberry Pi reached over ZeroTier. When the link has
+# been idle, the first packets fail for a few seconds while ZeroTier sets the
+# path up again, and ssh gives up at once ("No route to host") - which is how
+# the nightly backup failed on 24 and 27 November 2026. So before each restic
+# step: ping it (which also wakes the path) and wait for its SSH port to
+# answer, retrying every 5 seconds for up to BACKUP_WAIT_SECONDS. Instant when
+# the link is already up; does nothing for a repository that isn't sftp:.
+BACKUP_WAIT_SECONDS="${BACKUP_WAIT_SECONDS:-180}"
+wait_for_backup_server() {
+  local target host port start waited limit
+  case "$RESTIC_REPOSITORY" in sftp:*) ;; *) return 0 ;; esac
+  target="${RESTIC_REPOSITORY#sftp:}"
+  target="${target%%:*}"                 # the ssh alias (or user@host)
+  # ssh -G prints the settings ssh would use for it (the HostName/Port from
+  # /root/.ssh/config). If that lookup fails, fall back to the name itself.
+  host="$( { ssh ${SSH_CONFIG_FILE:+-F "$SSH_CONFIG_FILE"} -G "$target" 2>/dev/null || true; } | awk '$1 == "hostname" { print $2; exit }')"
+  port="$( { ssh ${SSH_CONFIG_FILE:+-F "$SSH_CONFIG_FILE"} -G "$target" 2>/dev/null || true; } | awk '$1 == "port" { print $2; exit }')"
+  host="${host:-${target#*@}}"
+  port="${port:-22}"
+  if [ "$BACKUP_WAIT_SECONDS" -ge 120 ]; then limit="$((BACKUP_WAIT_SECONDS / 60)) minutes"; else limit="${BACKUP_WAIT_SECONDS}s"; fi
+  start=$(date +%s)
+  while :; do
+    ping -c 1 -W 2 "$host" >/dev/null 2>&1 || true
+    if timeout 5 bash -c "exec 3<>/dev/tcp/$host/$port" 2>/dev/null; then
+      waited=$(( $(date +%s) - start ))
+      if [ "$waited" -gt 0 ]; then
+        log "Backup server $target ($host) answered after ${waited}s"
+      fi
+      return 0
+    fi
+    if [ $(( $(date +%s) - start )) -ge "$BACKUP_WAIT_SECONDS" ]; then
+      fail "Couldn't reach the backup server $target ($host, SSH port $port) for $limit - check the ZeroTier link and that it's switched on"
+    fi
+    sleep 5
+  done
+}
+
 find "$WORK_PARENT" -maxdepth 1 -name 'plainsight-restore-check.*' -mmin +60 -exec rm -rf {} + 2>/dev/null || true
 
 status last_run=now status=running message=
@@ -82,6 +120,7 @@ status last_run=now status=running message=
 # ─── 1. Full integrity check (unchanged) ─────────────────────────────────────
 if [ "$SKIP_FULL_CHECK" != "1" ]; then
   log "Starting full restic check (read-data)…"
+  wait_for_backup_server
   if restic check --read-data; then
     log "Full check PASSED"
   else
@@ -110,6 +149,7 @@ WORK="$(mktemp -d "$WORK_PARENT/plainsight-restore-check.XXXXXX")"
 chmod 700 "$WORK"
 
 log "Restore test: restoring the latest nightly dump…"
+wait_for_backup_server
 restic restore latest --tag nightly --target "$WORK/restore" --include "$DUMP_IN_SNAPSHOT" >/dev/null \
   || fail "restic restore of $DUMP_IN_SNAPSHOT from the latest nightly snapshot failed"
 dump="$WORK/restore$DUMP_IN_SNAPSHOT"

@@ -588,6 +588,11 @@ in `config/backup/`:
   loaded), and removes everything afterwards. It refuses to load anything
   that mentions another database or users, and skips with a warning if
   the disk hasn't room.
+- Before each restic step both scripts make sure the backup server (a
+  Raspberry Pi over ZeroTier) is answering: ping it, which also wakes an idle
+  ZeroTier path, and wait for its SSH port, for up to 3 minutes
+  (`BACKUP_WAIT_SECONDS`). Instant when the link is up; past the limit the
+  run fails with "Couldn't reach the backup server ...".
 - `plainsight-backup-status` - both scripts record each run's result in
   `/var/lib/plainsight-backup/status.json` (readable by www-data, no
   credentials). The dashboard's status panel shows a **Nightly backup** and
