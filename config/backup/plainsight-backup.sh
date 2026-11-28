@@ -33,6 +33,32 @@ else
   )
 fi
 
+# ─── The server's own setup (2026-11-28) ─────────────────────────────────────
+# So a rebuilt server gets its plumbing back as well as its data: Apache,
+# MySQL and PHP config, systemd units and timers, cron.d, logrotate, SSH,
+# Let's Encrypt (/etc); the backup and deploy scripts (/usr/local/bin); the
+# www-data crontab; root's own scripts and the SSH key for the backup server
+# (/root); and this server's ZeroTier identity, so a rebuild rejoins the
+# network with the same address. All of it is small, and the repository is
+# encrypted. The repository password is excluded below - it's the key to
+# the backup itself, so keep a copy off the server (e.g. a password manager).
+# Paths that don't exist are skipped, so a missing one can't fail the backup.
+if [ -n "${SYSTEM_PATHS_OVERRIDE+set}" ]; then
+  read -r -a SYSTEM_CANDIDATES <<< "$SYSTEM_PATHS_OVERRIDE"
+else
+  SYSTEM_CANDIDATES=(
+    "/etc"
+    "/usr/local/bin"
+    "/var/spool/cron/crontabs"
+    "/root"
+    "/var/lib/zerotier-one"
+  )
+fi
+SYSTEM_PATHS=()
+for p in "${SYSTEM_CANDIDATES[@]}"; do
+  [ -e "$p" ] && SYSTEM_PATHS+=("$p")
+done
+
 # ─── Database dump ───────────────────────────────────────────────────────────
 DUMP_DIR="${DUMP_DIR:-/var/backups/mysql}"
 MYSQL_DEFAULTS="${MYSQL_DEFAULTS:-/etc/restic/db.cnf}"       # [client] block: dedicated backup user
@@ -117,8 +143,9 @@ log "Running restic backup…"
 wait_for_backup_server
 restic backup \
   --exclude-file="$EXCLUDE_FILE" \
+  --exclude="$RESTIC_PASSWORD_FILE" \
   --tag nightly \
-  "${BACKUP_PATHS[@]}" "$DUMP_DIR" \
+  "${BACKUP_PATHS[@]}" "${SYSTEM_PATHS[@]}" "$DUMP_DIR" \
   || fail "restic backup failed"
 log "restic backup OK"
 
@@ -136,7 +163,7 @@ restic forget \
 log "Integrity spot-check…"
 wait_for_backup_server
 if restic check --read-data-subset=5%; then
-  status status=ok last_success=now "message=Dump $dump_size, backed up and spot-checked (5%)."
+  status status=ok last_success=now "message=Dump $dump_size, websites and server setup backed up and spot-checked (5%)."
 else
   log "WARNING: restic check reported problems"
   # The backup itself completed, so it still counts as a success; the

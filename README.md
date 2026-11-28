@@ -578,8 +578,12 @@ root from systemd timers (`plainsight-backup.timer` about 02:40,
 in `config/backup/`:
 
 - `plainsight-backup.sh` - dumps all MySQL databases, backs them up with the
-  web roots to the restic repository over SFTP, applies retention and
-  spot-checks 5% of the data.
+  web roots and the server's own setup (`/etc`, `/usr/local/bin`, the
+  crontabs, `/root`, ZeroTier's identity - missing paths skipped, the restic
+  password file excluded) to the restic repository over SFTP, applies
+  retention and spot-checks 5% of the data. Keep a copy of
+  `/etc/restic/repo-password` off the server: without it no backup can be
+  read.
 - `plainsight-backup-check.sh` - a full restic check (reads 100% of the
   data), then a **restore test**: restores the latest nightly dump, loads
   only the `vulndash` database from it into a scratch database as a
