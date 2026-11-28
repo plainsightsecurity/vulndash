@@ -5,7 +5,8 @@ namespace VulnDash\Lib;
 
 /**
  * Emails admins when the Knowledge Base, host detection or exploit intel
- * (CISA KEV + EPSS, since 2026-11-27) sync goes wrong,
+ * (CISA KEV + EPSS, since 2026-11-27) sync goes wrong - or the nightly
+ * backup or weekly backup check (SyncStatusRepository::backupStatuses()) -
  * and again when it recovers (2026-11-27). Run every 15 minutes by
  * scripts/send_sync_alerts.php. It judges health exactly as the dashboard's
  * sync status panel does (SyncStatusRepository::getSyncStatuses()), so an
@@ -204,8 +205,13 @@ final class SyncHealthAlerts
                     . ', far longer than a run takes - the process probably died or left its lock behind.' . $lastOk;
             case 'overdue':
                 return "{$label} hasn't succeeded for longer than expected." . $lastOk
-                    . ' Nothing has failed since, so check cron is still running the job.';
+                    . (!empty($s['is_backup'])
+                        ? ' Nothing has failed since, so check its systemd timer is still running (systemctl list-timers \'plainsight-backup*\').'
+                        : ' Nothing has failed since, so check cron is still running the job.');
             case 'warning':
+                if (!empty($s['notes'])) {
+                    return "{$label}: " . implode(' ', $s['notes']);
+                }
                 if (!empty($s['stale_feeds'])) {
                     return "{$label}: " . implode('; ', array_map(
                         static fn (array $f): string => $f['feed'] . ($f['last'] !== null ? ' last refreshed ' . self::when($f['last']) : ' has never loaded'),

@@ -373,6 +373,9 @@ $postureTagSuffix = $viewTagId !== null ? ' in this tag' : '';
             <?php endif; ?>
         </div>
         <?php endif; ?>
+        <?php if (!empty($sync['notes'])): ?>
+        <div class="sync-status-note"><?php foreach ($sync['notes'] as $note): ?><?= Helpers::e($note) ?> <?php endforeach; ?></div>
+        <?php endif; ?>
         <?php if (!empty($sync['stale_feeds'])): ?>
         <div class="sync-status-note">
             <?php foreach ($sync['stale_feeds'] as $stale): ?>

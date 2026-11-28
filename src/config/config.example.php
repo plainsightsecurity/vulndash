@@ -118,6 +118,9 @@ return [
     // And (src/Lib/SyncHealthAlerts.php, scripts/send_sync_alerts.php) a KB or
     // host sync failing, stuck or overdue - judged as the dashboard's sync
     // status panel does, so set sync.*_expected_interval_minutes below right.
+    // Where the backup scripts (config/backup/) record their results.
+    // 'backup' => ['status_file' => '/var/lib/plainsight-backup/status.json'],
+
     'alerts' => [
         // 'admin_emails'           => ['mark@plainsightsecurity.co.uk'], // default: every active admin
         'api_budget_low_threshold'  => 5,   // default 5 calls left on an endpoint + version
@@ -138,6 +141,9 @@ return [
         'knowledge_base_expected_interval_minutes'  => 720,  // default 1440
         'host_detections_expected_interval_minutes' => 30,   // default 180
         'exploit_intel_expected_interval_minutes'   => 360,  // default 360 (00:30, 06:30, 12:30, 18:30)
+        // Backups (config/backup/, systemd timers): overdue after twice these.
+        'backup_expected_interval_minutes'          => 1440,  // default 1440 (nightly)
+        'backup_check_expected_interval_minutes'    => 10080, // default 10080 (weekly)
 
         // Auto interval (src/Lib/ApiBudget.php): cron runs the host sync every
         // host_detection_cron_minutes; each run picks the shortest of

@@ -572,6 +572,40 @@ itself stopping altogether.
 
 `--dry-run` shows what would be emailed without sending or saving anything.
 
+**Backups.** The nightly offsite backup and the weekly backup check run as
+root from systemd timers (`plainsight-backup.timer` about 02:40,
+`plainsight-backup-check.timer` Sundays about 04:20). Their scripts are kept
+in `config/backup/`:
+
+- `plainsight-backup.sh` - dumps all MySQL databases, backs them up with the
+  web roots to the restic repository over SFTP, applies retention and
+  spot-checks 5% of the data.
+- `plainsight-backup-check.sh` - a full restic check (reads 100% of the
+  data), then a **restore test**: restores the latest nightly dump, loads
+  only the `vulndash` database from it into a scratch database as a
+  temporary MySQL user with rights on that database alone, compares row
+  counts with live (triggers, routines and events are counted, not
+  loaded), and removes everything afterwards. It refuses to load anything
+  that mentions another database or users, and skips with a warning if
+  the disk hasn't room.
+- `plainsight-backup-status` - both scripts record each run's result in
+  `/var/lib/plainsight-backup/status.json` (readable by www-data, no
+  credentials). The dashboard's status panel shows a **Nightly backup** and
+  a **Weekly backup check** card from it, and the sync alert emails cover
+  them: failed, stuck, overdue (no successful backup for 48 hours, no check
+  for 14 days) or a warning.
+
+Install or update (as root; the scripts are root-only because the restic
+password file is):
+
+```
+cd /var/www/dashboard.plainsightsecurity.co.uk/config/backup
+sudo install -o root -g root -m 750 plainsight-backup.sh plainsight-backup-check.sh /usr/local/bin/
+sudo install -o root -g root -m 755 plainsight-backup-status /usr/local/bin/
+sudo install -d -o root -g root -m 755 /var/lib/plainsight-backup
+sudo systemctl start plainsight-backup-check.service   # optional: run the check now (takes a while)
+```
+
 **Disk space.** The same 15-minute job also checks the disks the app depends
 on (root, MySQL's data directory, the app, `/var/log/vulndash`,
 `/var/backups`, plus any `alerts.disk_paths`) and emails admins when one

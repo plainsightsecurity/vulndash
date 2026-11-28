@@ -167,10 +167,102 @@ class SyncStatusRepository
                 'missing_kb_qids'    => $missingKbQids,
                 'kb_missing_warn_hours' => $warnHours,
                 'stale_feeds'        => $staleFeeds,
+                'notes'              => [],
+                'is_backup'          => false,
             ];
         }
 
+        foreach (self::backupStatuses() as $row) {
+            $results[] = $row;
+        }
+
         return $results;
+    }
+
+    /** sync_type => [label, status file section, default expected minutes, config key] */
+    private const BACKUP_CARDS = [
+        'backup'       => ['Nightly backup (restic)', 'backup', 1440, 'sync.backup_expected_interval_minutes'],
+        'backup_check' => ['Weekly backup check', 'check', 10080, 'sync.backup_check_expected_interval_minutes'],
+    ];
+
+    public const DEFAULT_BACKUP_STATUS_FILE = '/var/lib/plainsight-backup/status.json';
+
+    /**
+     * The nightly restic backup and the weekly backup check (2026-11-27).
+     * They run as root from systemd timers, outside this app (scripts in
+     * config/backup/), and each writes its result to a small JSON status
+     * file (backup.status_file, default /var/lib/plainsight-backup/status.json,
+     * readable by www-data, no credentials in it). Read here in the same
+     * shape as the sync cards, so the dashboard panel and SyncHealthAlerts
+     * cover them with no extra code: failed, stuck (said "running" for over
+     * a day), overdue (no success in twice the expected interval: 48 hours
+     * for the backup, 14 days for the check) and warning (the backup's 5%
+     * spot-check or the check's restore test reported something short of a
+     * failure). No file yet (scripts not installed) shows as "never run",
+     * which never alerts.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public static function backupStatuses(): array
+    {
+        // PLAINSIGHT_BACKUP_STATUS is the same override plainsight-backup-status
+        // honours (used by the tests); otherwise config, then the default.
+        $file = (string)(getenv('PLAINSIGHT_BACKUP_STATUS') ?: (Config::get('backup.status_file') ?? self::DEFAULT_BACKUP_STATUS_FILE));
+        $data = is_readable($file) ? json_decode((string)@file_get_contents($file), true) : null;
+        $data = is_array($data) ? $data : [];
+        $local = static function ($iso): ?string {
+            $ts = is_string($iso) && $iso !== '' ? strtotime($iso) : false;
+            return $ts !== false ? date('Y-m-d H:i:s', $ts) : null;
+        };
+
+        $rows = [];
+        foreach (self::BACKUP_CARDS as $type => [$label, $section, $defaultMinutes, $configKey]) {
+            $d = is_array($data[$section] ?? null) ? $data[$section] : null;
+            $expected = (int)(Config::get($configKey) ?? $defaultMinutes);
+            $status = (string)($d['status'] ?? '');
+            $lastRun = $local($d['last_run'] ?? null);
+            $lastSuccess = $local($d['last_success'] ?? null);
+            $message = trim((string)($d['message'] ?? ''));
+
+            if ($d === null) {
+                $state = 'never_run';
+                $message = $data === [] && !is_file($file)
+                    ? 'No status recorded yet - install the backup scripts from config/backup/ (see the README).'
+                    : $message;
+            } elseif ($status === 'running') {
+                $state = $lastRun !== null && time() - strtotime($lastRun) > 86400 ? 'stuck' : 'running';
+            } elseif ($status === 'failed') {
+                $state = 'failed';
+            } elseif ($lastSuccess === null) {
+                $state = 'never_run';
+            } elseif (time() - strtotime($lastSuccess) > $expected * 60 * self::OVERDUE_MULTIPLIER) {
+                $state = 'overdue';
+            } elseif ($status === 'warning') {
+                $state = 'warning';
+            } else {
+                $state = 'healthy';
+            }
+
+            $rows[] = [
+                'sync_type'          => $type,
+                'label'              => $label,
+                'state'              => $state,
+                'last_status'        => $status !== '' ? $status : null,
+                'last_started_at'    => $lastRun,
+                'last_completed_at'  => null,
+                'last_error_message' => $state === 'failed' ? $message : null,
+                'records_processed'  => null,
+                'last_success_at'    => $lastSuccess,
+                'missing_kb_qids'    => [],
+                'kb_missing_warn_hours' => MissingKbQidRepository::warnHours(),
+                'stale_feeds'        => [],
+                // Shown under the card (and used for a warning email); a
+                // failure's message is already the card's main text.
+                'notes'              => $state !== 'failed' && $message !== '' ? [$message] : [],
+                'is_backup'          => true,
+            ];
+        }
+        return $rows;
     }
 
     /**

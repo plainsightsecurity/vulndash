@@ -1,0 +1,57 @@
+#!/usr/bin/env php
+<?php
+// plainsight-backup-status - records a backup result for the dashboard.
+//
+// Install to: /usr/local/bin/plainsight-backup-status  (chmod 755, root:root)
+//
+// Usage: plainsight-backup-status <backup|check> key=value [key=value ...]
+//   A value of "now" is replaced with the current time (ISO 8601, with
+//   offset). Keys are merged into that section of the status file, so a run
+//   can set "last_run=now" at the start and "status=ok last_success=now" at
+//   the end without losing the rest.
+//
+// Writes /var/lib/plainsight-backup/status.json (or $PLAINSIGHT_BACKUP_STATUS),
+// mode 0644 in a 0755 directory, so the dashboard (www-data) can read it -
+// it holds times, a status and a short message, never credentials. Written
+// to a temp file and renamed, so a reader never sees half a file.
+// Deliberately standalone (no VulnDash bootstrap): it runs as root from the
+// backup scripts, which have no business loading the web app.
+
+if ($argc < 3 || !in_array($argv[1], ['backup', 'check'], true)) {
+    fwrite(STDERR, "Usage: plainsight-backup-status <backup|check> key=value [key=value ...]\n");
+    exit(2);
+}
+$file = getenv('PLAINSIGHT_BACKUP_STATUS') ?: '/var/lib/plainsight-backup/status.json';
+$dir = dirname($file);
+// Only a directory this creates gets its mode set: an existing one (which
+// could be anything the path was pointed at, /tmp included) is left as it is.
+if (!is_dir($dir)) {
+    if (!mkdir($dir, 0755, true)) {
+        fwrite(STDERR, "Cannot create {$dir}\n");
+        exit(1);
+    }
+    chmod($dir, 0755);   // regardless of the caller's umask (the scripts use 077)
+}
+
+$data = is_file($file) ? json_decode((string)file_get_contents($file), true) : [];
+$data = is_array($data) ? $data : [];
+$section = is_array($data[$argv[1]] ?? null) ? $data[$argv[1]] : [];
+foreach (array_slice($argv, 2) as $pair) {
+    $eq = strpos($pair, '=');
+    if ($eq === false || $eq === 0) {
+        fwrite(STDERR, "Not key=value: {$pair}\n");
+        exit(2);
+    }
+    $key = substr($pair, 0, $eq);
+    $value = substr($pair, $eq + 1);
+    $section[$key] = $value === 'now' ? date('c') : mb_substr($value, 0, 500);
+}
+$data[$argv[1]] = $section;
+
+$tmp = $file . '.tmp';
+if (file_put_contents($tmp, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n") === false) {
+    fwrite(STDERR, "Cannot write {$tmp}\n");
+    exit(1);
+}
+chmod($tmp, 0644);
+rename($tmp, $file);
