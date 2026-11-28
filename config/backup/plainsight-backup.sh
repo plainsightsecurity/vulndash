@@ -51,6 +51,12 @@ log() { logger -t "$LOG_TAG" -- "$*"; printf '%s  %s\n' "$(date '+%F %T')" "$*";
 status() { "$STATUS_BIN" backup "$@" >/dev/null 2>&1 || log "WARNING: could not record status ($STATUS_BIN)"; }
 fail() { log "ERROR: $*"; status status=failed "message=$*"; exit 1; }
 trap 'fail "unexpected error at line $LINENO"' ERR
+# Stopped part-way (systemctl stop, shutdown): record it, rather than the
+# card showing "running" until the next night.
+on_signal() { trap - ERR; log "Stopped by SIG$1 before finishing"; status status=failed "message=Stopped (SIG$1) before finishing"; exit 1; }
+trap 'on_signal TERM' TERM
+trap 'on_signal INT' INT
+trap 'on_signal HUP' HUP
 
 umask 077
 mkdir -p "$DUMP_DIR" "$RESTIC_CACHE_DIR"

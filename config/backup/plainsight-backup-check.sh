@@ -65,6 +65,17 @@ cleanup() {
   return 0   # never let cleanup itself look like a failure (the ERR trap is still set)
 }
 trap cleanup EXIT
+# Stopped part-way (systemctl stop, Ctrl-C, shutdown): bash doesn't run the
+# EXIT trap when killed by a signal it isn't trapping, so catch them, record
+# it, and exit - which runs cleanup above. (Only kill -9 or a power cut can
+# skip this; the next run drops a leftover scratch database and user before
+# creating them, and removes stale restore folders just below.)
+on_signal() { trap - ERR; log "Stopped by SIG$1 before finishing"; status status=failed "message=Stopped (SIG$1) before finishing"; exit 1; }
+trap 'on_signal TERM' TERM
+trap 'on_signal INT' INT
+trap 'on_signal HUP' HUP
+
+find "$WORK_PARENT" -maxdepth 1 -name 'plainsight-restore-check.*' -mmin +60 -exec rm -rf {} + 2>/dev/null || true
 
 status last_run=now status=running message=
 
